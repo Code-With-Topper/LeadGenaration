@@ -249,6 +249,57 @@ mailbox exists.
 
 ---
 
+## When lead generation finds nothing
+
+Run the diagnostic **on the server itself**. It checks the browser and asks
+every search source in turn, and changes nothing in the database:
+
+```bash
+python manage.py test_search
+```
+
+It will tell you which of three things is wrong:
+
+| It says | Meaning | Fix |
+|---|---|---|
+| *the browser would not start* | Playwright's browser is missing | `playwright install --with-deps chromium`, or set `CHROME_BINARY` to its full path |
+| *UNREACHABLE* | No outbound HTTPS or no DNS | Check the firewall: `curl -I https://html.duckduckgo.com/` |
+| *BLOCKED* | The search engine is refusing this server | See below |
+
+To test extraction on one site, without searching at all:
+
+```bash
+python manage.py test_search --url https://somecompany.in
+```
+
+### If the search engines are blocking you
+
+This is the common one, and it is not a fault in the code or your data. Search
+engines rate-limit servers that query them in bulk, and a data-centre IP address
+makes it more likely. Three sources are tried in order — DuckDuckGo, then Bing,
+then Google — and a source that refuses twice is dropped for the rest of the
+run, so a blocked run now fails in seconds with an explanation instead of
+grinding for hours and reporting "0 leads".
+
+In order of what usually works:
+
+1. **Wait an hour** and run again. The limit is usually temporary.
+2. **Run a smaller search** — one district and one keyword, not the whole state.
+3. **Import from CSV instead.** This never touches a search engine, and is the
+   reliable path for bulk data.
+4. If it keeps happening, the server needs a different IP address.
+
+### Why a state-wide run is capped
+
+A whole state with seven keywords is 161 searches — most of a day's crawling,
+and impossible to tell apart from a stuck run. A run is capped at 40 searches
+(`MAX_QUERIES_PER_RUN` in `lead_generation/engine.py`) and the queries are
+ordered **keyword first, then district**, so the first pass sweeps every
+district rather than spending all seven keywords on the first one. Run it again
+to go deeper.
+
+---
+
 ## Maintenance commands
 
 | Command | What it does |
@@ -259,6 +310,7 @@ mailbox exists.
 | `seed_reference_data` | Load districts, industries, keywords, email templates. Idempotent. |
 | `backfill_normalized` | Rebuild the matching keys and quality scores. Run after upgrading, or after changing a normalisation rule. `--dry-run` to preview. |
 | `create_demo_data` | Sample leads for a demonstration. `--clear` wipes first. |
+| `test_search` | Diagnose lead generation on the server: browser, network, and each search source. Changes nothing. |
 
 ### Upgrading
 
@@ -298,6 +350,14 @@ against. Its sync API keeps an event loop running and Django refuses ORM calls
 from inside one, so rather than disabling that safety check, the crawler runs in
 its own thread and hands plain data back through a queue: the browser never
 touches the database.
+
+**The browser presents a normal desktop identity.** Playwright's default
+announces `HeadlessChrome` and sets `navigator.webdriver`, and search engines
+block that on sight — it was the main reason lead generation returned nothing.
+The context now sends a real Chrome user agent, `en-IN` locale and an Indian
+time zone, which also makes the results India-relevant. This is not a CAPTCHA
+bypass: when a challenge or consent wall appears, the run detects it, moves to
+another source, and stops with an explanation if none will answer.
 
 **A row whose contact details are all invalid is kept, not rejected.** The
 company name is real data the client typed. It is imported and counted

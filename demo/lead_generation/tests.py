@@ -52,6 +52,31 @@ class QueryBuildingTests(TestCase):
         for name in ('Paschim Bardhaman', 'Purba Medinipur', 'Howrah'):
             self.assertTrue(any(name in plan.query for plan in plans), name)
 
+    def test_coverage_comes_before_keyword_depth(self):
+        """
+        The first pass must sweep every district with one keyword, not spend
+        every keyword on the first district. A run cut short then still has
+        state-wide coverage.
+        """
+        plans = engine.build_queries(self.job())
+        first_pass = plans[:3]
+        self.assertEqual(
+            {plan.district for plan in first_pass},
+            {'Paschim Bardhaman', 'Purba Medinipur', 'Howrah'},
+            [plan.district for plan in first_pass])
+
+    def test_the_number_of_searches_is_capped(self):
+        """
+        A whole state with seven keywords is 161 searches — most of a day, and
+        indistinguishable from a stuck run.
+        """
+        for index in range(30):
+            District.objects.create(state='West Bengal', name=f'District {index}')
+        job = self.job(keywords=','.join(f'keyword {i}' for i in range(7)))
+        plans = engine.build_queries(job)
+        self.assertLessEqual(len(plans), engine.MAX_QUERIES_PER_RUN)
+        self.assertEqual(len(plans), engine.MAX_QUERIES_PER_RUN)
+
     def test_the_industry_is_the_fallback_keyword(self):
         plans = engine.build_queries(self.job(keywords='', district='Howrah'))
         self.assertEqual(len(plans), 1)
@@ -105,6 +130,161 @@ class SearchResultFilterTests(TestCase):
     def test_a_google_internal_link_is_discarded(self):
         self.assertEqual(
             engine._decode_google_url('https://www.google.com/preferences'), '')
+
+
+class SearchSourceTests(TestCase):
+    """
+    The search layer, without a browser.
+
+    Lead generation previously returned nothing because the browser announced
+    itself as headless and Google blocked it, and because a blocked engine was
+    asked 161 times in a row. These cover the replacement.
+    """
+
+    def test_duckduckgo_is_tried_before_bing_and_google(self):
+        """
+        DuckDuckGo renders without JavaScript and tolerates a server doing
+        this politely, so it is the source most likely to answer at all.
+        """
+        names = [name for name, _fn in engine.SEARCH_SOURCES]
+        self.assertEqual(names[0], 'DuckDuckGo')
+        self.assertIn('Bing', names)
+        self.assertIn('Google', names)
+
+    def test_a_blocked_source_is_dropped_after_two_refusals(self):
+        state = engine.SearchState()
+        self.assertEqual(len(state.live_sources()), 3)
+
+        for _ in range(engine.SearchState.BLOCKS_BEFORE_GIVING_UP):
+            state.record('DuckDuckGo', engine.SearchOutcome.BLOCKED)
+
+        live = [name for name, _fn in state.live_sources()]
+        self.assertNotIn('DuckDuckGo', live)
+        self.assertEqual(len(live), 2)
+        self.assertFalse(state.all_blocked)
+
+    def test_all_blocked_is_reported_once_every_source_refuses(self):
+        state = engine.SearchState()
+        for name, _fn in engine.SEARCH_SOURCES:
+            for _ in range(engine.SearchState.BLOCKS_BEFORE_GIVING_UP):
+                state.record(name, engine.SearchOutcome.BLOCKED)
+        self.assertTrue(state.all_blocked)
+        self.assertIn('blocked', state.summary())
+
+    def test_a_success_clears_an_earlier_block(self):
+        """One rate-limited request must not retire a working source."""
+        state = engine.SearchState()
+        state.record('Bing', engine.SearchOutcome.BLOCKED)
+        state.record('Bing', engine.SearchOutcome.OK)
+        state.record('Bing', engine.SearchOutcome.BLOCKED)
+        self.assertIn('Bing', [name for name, _fn in state.live_sources()])
+
+    def test_run_search_falls_through_to_the_next_source(self):
+        calls = []
+
+        def blocked(browser, query, limit):
+            calls.append('blocked')
+            return [], engine.SearchOutcome.BLOCKED
+
+        def works(browser, query, limit):
+            calls.append('works')
+            return [('SD Steel Pvt Ltd', 'https://sdsteel.in')], \
+                engine.SearchOutcome.OK
+
+        original = engine.SEARCH_SOURCES
+        engine.SEARCH_SOURCES = (('First', blocked), ('Second', works))
+        try:
+            state = engine.SearchState()
+            results, note = engine.run_search(None, 'q', 5, state)
+        finally:
+            engine.SEARCH_SOURCES = original
+
+        self.assertEqual(calls, ['blocked', 'works'])
+        self.assertEqual(len(results), 1)
+        self.assertIn('Second', note)
+
+    def test_an_empty_result_says_which_sources_were_tried(self):
+        """A bare "0 leads" teaches the user nothing."""
+        def nothing(browser, query, limit):
+            return [], engine.SearchOutcome.EMPTY
+
+        original = engine.SEARCH_SOURCES
+        engine.SEARCH_SOURCES = (('OnlyOne', nothing),)
+        try:
+            engine.polite_sleep = lambda: None
+            _results, note = engine.run_search(None, 'q', 5,
+                                               engine.SearchState())
+        finally:
+            engine.SEARCH_SOURCES = original
+
+        self.assertIn('OnlyOne', note)
+        self.assertIn('empty', note)
+
+    def test_duckduckgo_redirect_urls_are_decoded(self):
+        self.assertEqual(
+            engine._decode_ddg_url(
+                '//duckduckgo.com/l/?uddg=https%3A%2F%2Fsdsteel.in%2F&rut=x'),
+            'https://sdsteel.in/')
+
+    def test_a_duckduckgo_internal_link_is_discarded(self):
+        self.assertEqual(
+            engine._decode_ddg_url('https://duckduckgo.com/settings'), '')
+
+    def test_a_direct_result_url_passes_through(self):
+        self.assertEqual(engine._decode_ddg_url('https://sdsteel.in/'),
+                         'https://sdsteel.in/')
+
+
+class BlockDetectionTests(TestCase):
+    """
+    A consent wall is full of links, so "did links load?" is not enough: the
+    run would happily scrape a cookie notice.
+    """
+
+    class FakePage:
+        def __init__(self, url, title):
+            self._url, self._title = url, title
+
+        @property
+        def url(self):
+            return self._url
+
+        def title(self):
+            return self._title
+
+    def check(self, url, title):
+        browser = engine.Browser()
+        browser.page = self.FakePage(url, title)
+        return engine.is_blocked_page(browser)
+
+    def test_a_captcha_page_is_detected(self):
+        self.assertTrue(self.check('https://www.google.com/sorry/index',
+                                   'Our systems have detected unusual traffic'))
+
+    def test_a_google_consent_wall_is_detected(self):
+        self.assertTrue(self.check('https://consent.google.com/m?continue=',
+                                   'Before you continue to Google Search'))
+
+    def test_a_cloudflare_interstitial_is_detected(self):
+        self.assertTrue(self.check('https://www.bing.com/search?q=x',
+                                   'Just a moment...'))
+
+    def test_a_real_results_page_is_not_flagged(self):
+        self.assertFalse(self.check(
+            'https://html.duckduckgo.com/html/?q=sponge+iron',
+            'sponge iron manufacturer at DuckDuckGo'))
+
+
+class BrowserIdentityTests(TestCase):
+    """
+    The single biggest cause of lead generation finding nothing: Playwright's
+    default announces HeadlessChrome and sets navigator.webdriver, and the
+    search engines block that on sight.
+    """
+
+    def test_the_user_agent_is_not_headless(self):
+        self.assertNotIn('Headless', engine.USER_AGENT)
+        self.assertIn('Chrome/', engine.USER_AGENT)
 
 
 class CompanyNameFromPageTests(TestCase):

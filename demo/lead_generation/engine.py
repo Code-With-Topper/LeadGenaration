@@ -52,9 +52,26 @@ LOGGER = logging.getLogger('lead_generation')
 DELAY_MIN_SECONDS = 2.0
 DELAY_MAX_SECONDS = 5.0
 PAGE_LOAD_TIMEOUT = 35
-ELEMENT_WAIT_TIMEOUT = 12
+# Kept short on purpose: when a search engine is blocking us there is nothing
+# to wait for, and a long wait multiplied by every query is how a run ends up
+# doing nothing for hours.
+ELEMENT_WAIT_TIMEOUT = 6
 MAX_PAGES_PER_SITE = 4
 RESULTS_PER_QUERY = 20
+
+# A whole-state run with seven keywords builds 161 searches. Left uncapped that
+# is most of a day's crawling, and the user cannot tell a slow run from a stuck
+# one. The cap keeps a run finishable; the queries are ordered so the first
+# pass covers every district rather than exhausting one.
+MAX_QUERIES_PER_RUN = 40
+
+# A realistic desktop browser identity. Playwright's default announces
+# "HeadlessChrome" and sets navigator.webdriver, which Google and Bing block on
+# sight — this was the main reason lead generation returned nothing.
+USER_AGENT = (
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+)
 
 # Link text and URLs that usually lead to contact details.
 CONTACT_KEYWORDS = (
@@ -173,10 +190,25 @@ class Browser:
         self._context = self._browser.new_context(
             viewport={'width': 1366, 'height': 900},
             java_script_enabled=True,
+            # Look like a normal Indian desktop visitor. Without this the
+            # browser announces HeadlessChrome and gets blocked immediately,
+            # and the results come back geo-targeted to the server, not India.
+            user_agent=USER_AGENT,
+            locale='en-IN',
+            timezone_id='Asia/Kolkata',
+            extra_http_headers={
+                'Accept-Language': 'en-IN,en-GB;q=0.9,en;q=0.8',
+            },
+        )
+        # navigator.webdriver is true in an automated browser and is the other
+        # flag these sites check. Hiding it is not a CAPTCHA bypass: we still
+        # stop when we are challenged.
+        self._context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
         )
         self._context.set_default_timeout(PAGE_LOAD_TIMEOUT * 1000)
-        # Images and fonts are never read, and skipping them makes a run far
-        # cheaper on a small server's bandwidth.
+        # Images, video and fonts are never read, and skipping them makes a run
+        # far cheaper on a small server's bandwidth.
         self._context.route(
             '**/*',
             lambda route: route.abort()
@@ -255,14 +287,29 @@ def polite_sleep():
     time.sleep(random.uniform(DELAY_MIN_SECONDS, DELAY_MAX_SECONDS))
 
 
+# Titles and URLs that mean "we are not getting results from here".
+BLOCK_URL_MARKERS = ('/sorry', 'recaptcha', 'consent.google', '/challenge',
+                     'ipv4.google.com/sorry', 'bing.com/challenge')
+BLOCK_TITLE_MARKERS = (
+    'captcha', 'unusual traffic', 'not a robot', 'verify you are human',
+    'are you a robot', 'before you continue', 'access denied',
+    'are you human', 'security check', 'just a moment',
+)
+
+
 def is_blocked_page(browser: Browser) -> bool:
-    """A search engine's 'unusual traffic' or CAPTCHA page."""
+    """
+    True when the page we got is a challenge, consent wall or block notice
+    rather than search results.
+
+    The consent interstitial matters as much as the CAPTCHA: it is full of
+    links, so a naive "did any links load?" check passes and the run silently
+    scrapes a cookie notice.
+    """
     url = browser.url.lower()
     title = browser.title().lower()
-    markers = ('captcha', 'unusual traffic', 'not a robot',
-               'verify you are human', 'are you a robot')
-    return ('/sorry' in url or 'recaptcha' in url
-            or any(marker in title for marker in markers))
+    return (any(marker in url for marker in BLOCK_URL_MARKERS)
+            or any(marker in title for marker in BLOCK_TITLE_MARKERS))
 
 
 # ==========================================================================
@@ -324,53 +371,201 @@ def _clean_result(href: str, title: str) -> tuple[str, str] | None:
     return title, url
 
 
-def search_bing(browser: Browser, query: str, limit: int) -> list[tuple[str, str]]:
-    LOGGER.info('Searching Bing: %s', query)
-    if not browser.goto('https://www.bing.com/search?q=' + quote_plus(query)):
-        return []
+class SearchOutcome:
+    """Why a search returned what it did — so a failure can be explained."""
+    OK = 'ok'                 # results found
+    EMPTY = 'empty'           # the page loaded, genuinely nothing matched
+    BLOCKED = 'blocked'       # challenge, consent wall or rate limit
+    UNREACHABLE = 'unreachable'   # the page would not load at all
+
+
+def search_duckduckgo(browser: Browser, query: str,
+                      limit: int) -> tuple[list, str]:
+    """
+    DuckDuckGo's HTML endpoint. Tried first, deliberately.
+
+    It renders without JavaScript and is by far the most tolerant of a server
+    doing this politely, so it is the source most likely to work from a small
+    VPS. Google and Bing are the fallbacks, not the other way round.
+    """
+    url = 'https://html.duckduckgo.com/html/?q=' + quote_plus(query)
+    LOGGER.info('Searching DuckDuckGo: %s', query)
+
+    if not browser.goto(url):
+        return [], SearchOutcome.UNREACHABLE
     if is_blocked_page(browser):
-        LOGGER.warning('Bing is rate limiting this run.')
-        return []
-    if not browser.wait_for('li.b_algo h2 a'):
-        return []
+        return [], SearchOutcome.BLOCKED
 
     anchors = browser.evaluate("""
-        () => Array.from(document.querySelectorAll('li.b_algo h2 a'))
-            .map(a => ({href: a.href || '', title: a.innerText || ''}))
+        () => Array.from(document.querySelectorAll(
+                'a.result__a, h2.result__title > a, .result__title a'))
+            .map(a => ({href: a.href || '',
+                        title: (a.innerText || a.textContent || '').trim()}))
     """, default=[]) or []
 
-    return _collect(anchors, limit, decode=_decode_bing_url)
+    if not anchors:
+        # No result links at all usually means a challenge page, not a query
+        # with no matches.
+        if 'anomaly' in browser.html().lower()[:4000]:
+            return [], SearchOutcome.BLOCKED
+        return [], SearchOutcome.EMPTY
+
+    found = _collect(anchors, limit, decode=_decode_ddg_url)
+    return found, SearchOutcome.OK if found else SearchOutcome.EMPTY
 
 
-def search_google(browser: Browser, query: str, limit: int) -> list[tuple[str, str]]:
+def search_bing(browser: Browser, query: str, limit: int) -> tuple[list, str]:
+    """Bing. Second choice: usable, but rate limits a server quickly."""
+    LOGGER.info('Searching Bing: %s', query)
+    url = ('https://www.bing.com/search?q=' + quote_plus(query)
+           + '&count=30&setlang=en&cc=IN')
+
+    if not browser.goto(url):
+        return [], SearchOutcome.UNREACHABLE
+    if is_blocked_page(browser):
+        return [], SearchOutcome.BLOCKED
+
+    if not browser.wait_for('li.b_algo h2 a, .b_algo h2 a'):
+        return [], SearchOutcome.BLOCKED
+
+    anchors = browser.evaluate("""
+        () => Array.from(document.querySelectorAll('li.b_algo h2 a, .b_algo h2 a'))
+            .map(a => ({href: a.href || '',
+                        title: (a.innerText || a.textContent || '').trim()}))
+    """, default=[]) or []
+
+    if not anchors:
+        return [], SearchOutcome.EMPTY
+
+    found = _collect(anchors, limit, decode=_decode_bing_url)
+    return found, SearchOutcome.OK if found else SearchOutcome.EMPTY
+
+
+def search_google(browser: Browser, query: str, limit: int) -> tuple[list, str]:
+    """
+    Google. Last choice: the best index, and the quickest to refuse a server.
+
+    One request with num=, rather than paging: when Google is going to block
+    us it does so on the first request, and paging just multiplies the wait.
+    """
     LOGGER.info('Searching Google: %s', query)
-    results: list[tuple[str, str]] = []
-    for start in range(0, limit, 10):
-        url = f'https://www.google.com/search?q={quote_plus(query)}&start={start}'
-        if not browser.goto(url):
-            break
-        if is_blocked_page(browser):
-            LOGGER.info('Google is rate limiting; falling back to Bing.')
-            return []
-        if not browser.wait_for('a[href]'):
-            break
+    url = (f'https://www.google.com/search?q={quote_plus(query)}'
+           f'&num={min(limit, 30)}&hl=en&gl=in')
 
+    if not browser.goto(url):
+        return [], SearchOutcome.UNREACHABLE
+    if is_blocked_page(browser):
+        return [], SearchOutcome.BLOCKED
+
+    # Real result links sit inside a heading; matching those rather than every
+    # anchor keeps navigation, footer and "related searches" out.
+    anchors = browser.evaluate("""
+        () => Array.from(document.querySelectorAll('div#search a[href] h3, div#rso a[href] h3'))
+            .map(h => {
+                const a = h.closest('a');
+                return {href: a ? (a.href || '') : '',
+                        title: (h.innerText || h.textContent || '').trim()};
+            })
+    """, default=[]) or []
+
+    if not anchors:
+        # Fall back to a broad sweep before concluding anything.
         anchors = browser.evaluate("""
             () => Array.from(document.querySelectorAll('a[href]'))
                 .map(a => ({href: a.href || '',
                             title: (a.innerText || '').trim()}))
         """, default=[]) or []
         if not anchors:
-            break
+            return [], SearchOutcome.BLOCKED
 
-        results += _collect(anchors, limit - len(results),
-                            decode=_decode_google_url,
-                            seen={normalize.normalize_domain(u)
-                                  for _t, u in results})
-        if len(results) >= limit:
-            break
+    found = _collect(anchors, limit, decode=_decode_google_url)
+    return found, SearchOutcome.OK if found else SearchOutcome.EMPTY
+
+
+# Tried in this order. The first one that returns results wins.
+SEARCH_SOURCES = (
+    ('DuckDuckGo', search_duckduckgo),
+    ('Bing', search_bing),
+    ('Google', search_google),
+)
+
+
+class SearchState:
+    """
+    Remembers which sources have blocked us during this run.
+
+    Without this, a run with 161 queries asks a blocked engine 161 times and
+    waits every time. After two blocks a source is dropped for the rest of the
+    run, and when every source is gone the run stops and says so instead of
+    grinding on silently.
+    """
+    BLOCKS_BEFORE_GIVING_UP = 2
+
+    def __init__(self):
+        self.blocks: dict[str, int] = {}
+        self.wins: dict[str, int] = {}
+
+    def live_sources(self):
+        return [(name, fn) for name, fn in SEARCH_SOURCES
+                if self.blocks.get(name, 0) < self.BLOCKS_BEFORE_GIVING_UP]
+
+    @property
+    def all_blocked(self) -> bool:
+        return not self.live_sources()
+
+    def record(self, name: str, outcome: str) -> None:
+        if outcome == SearchOutcome.OK:
+            self.wins[name] = self.wins.get(name, 0) + 1
+            self.blocks.pop(name, None)      # a win clears earlier blocks
+        elif outcome in (SearchOutcome.BLOCKED, SearchOutcome.UNREACHABLE):
+            self.blocks[name] = self.blocks.get(name, 0) + 1
+
+    def summary(self) -> str:
+        parts = [f'{name}: {count} search(es) worked'
+                 for name, count in self.wins.items()]
+        parts += [f'{name}: blocked' for name in self.blocks
+                  if self.blocks[name] >= self.BLOCKS_BEFORE_GIVING_UP]
+        return '; '.join(parts) or 'no source responded'
+
+
+def run_search(browser: Browser, query: str, limit: int,
+               state: SearchState) -> tuple[list, str]:
+    """
+    Ask each live source in turn until one gives results.
+
+    Returns (results, note) where the note explains an empty result so it can
+    be shown to the user rather than swallowed.
+    """
+    attempts = []
+    for name, search in state.live_sources():
+        results, outcome = search(browser, query, limit)
+        state.record(name, outcome)
+        attempts.append(f'{name} {outcome}')
+
+        if results:
+            return results, f'{len(results)} site(s) via {name}'
+        if outcome in (SearchOutcome.BLOCKED, SearchOutcome.UNREACHABLE):
+            LOGGER.warning('%s did not answer (%s) for: %s', name, outcome, query)
+            continue
+        # EMPTY: the source answered and had nothing. Trying another may help.
         polite_sleep()
-    return results[:limit]
+
+    return [], 'no results (' + ', '.join(attempts) + ')'
+
+
+def _decode_ddg_url(href: str) -> str:
+    """DuckDuckGo wraps results in /l/?uddg=<url-encoded destination>."""
+    if not href:
+        return ''
+    if href.startswith('//'):
+        href = 'https:' + href
+    parsed = urlparse(href)
+    if 'duckduckgo.com' in parsed.netloc and parsed.path.startswith('/l/'):
+        target = parse_qs(parsed.query).get('uddg', [''])[0]
+        return target or ''
+    if 'duckduckgo.com' in parsed.netloc:
+        return ''
+    return href
 
 
 def _collect(anchors, limit, *, decode, seen=None) -> list[tuple[str, str]]:
@@ -635,15 +830,23 @@ def crawl_site(browser: Browser, url: str, title: str,
 
 def build_queries(job) -> list["SearchPlan"]:
     """
-    One search per (keyword × place).
+    One search per (keyword × place), capped and ordered for coverage.
 
     When no city is given the district is searched; when no district is given
     every active district of the state is searched. That is what makes "all of
     West Bengal" a real option rather than a promise.
 
+    Two details matter as much as the list itself:
+
+    * **Order.** Keyword first, then place — so the first pass sweeps every
+      district with the strongest keyword instead of spending all 7 keywords on
+      Alipurduar before Durgapur is ever searched. If a run is cut short, the
+      client still has state-wide coverage.
+    * **Cap.** A whole state with seven keywords is 161 searches, which is
+      most of a day. Capped, a run finishes and can be repeated.
+
     Each plan carries its own location, so a lead found by a state-wide run
-    still records the district it came from. Carrying it alongside the query
-    beats parsing it back out of the query text afterwards.
+    still records the district it came from.
     """
     from .models import District
 
@@ -659,21 +862,38 @@ def build_queries(job) -> list["SearchPlan"]:
         places = [(f'{d.name} district, {job.state}', '', d.name)
                   for d in districts] or [(job.state, '', '')]
 
-    return [
+    plans = [
         SearchPlan(
             query=f'{keyword} company in {place} contact address',
             city=city,
             district=district,
             state=job.state,
         )
+        for keyword in keywords            # keyword outer: coverage first
         for place, city, district in places
-        for keyword in keywords
     ]
+    return plans[:MAX_QUERIES_PER_RUN]
 
 
 # ==========================================================================
 # The run
 # ==========================================================================
+
+# Shown on the page when no search engine will answer this server. A run that
+# just says "0 leads" teaches the user nothing.
+BLOCKED_EXPLANATION = (
+    'Every search source refused this server, so no new companies could be '
+    'found. {detail}.\n\n'
+    'This is not a fault in your data — {leads} lead(s) already collected are '
+    'untouched. Search engines rate-limit servers that query them in bulk, and '
+    'a shared or data-centre IP address is usually the reason.\n\n'
+    'What usually fixes it:\n'
+    '  1. Wait an hour and run again — the limit is usually temporary.\n'
+    '  2. Run a smaller search: one district and one keyword at a time.\n'
+    '  3. Import leads from a CSV file instead, which never uses a search '
+    'engine.\n'
+    '  4. If it keeps happening, the server needs a different IP address.'
+)
 
 def run_generation_job(job_id: int) -> None:
     """
@@ -755,6 +975,13 @@ def run_generation_job(job_id: int) -> None:
             if kind == 'error':
                 _finish(job, 'FAILED', str(payload))
                 return
+            if kind == 'blocked':
+                # Every search source refused us. This is the one failure the
+                # user cannot act on without being told what it is, so say it
+                # plainly and give them the fix.
+                _finish(job, 'FAILED', BLOCKED_EXPLANATION.format(
+                    detail=payload, leads=job.leads_found))
+                return
             if kind == 'note':
                 job.note(str(payload))
                 job.heartbeat_at = timezone.now()
@@ -823,6 +1050,7 @@ def _crawl_thread(plans, max_websites, messages, stop_flag, pause_flag) -> None:
     """
     seen_domains: set[str] = set()
     visited = 0
+    state = SearchState()
 
     def waiting() -> bool:
         """Block while paused. Returns False once the run is stopped."""
@@ -838,15 +1066,18 @@ def _crawl_thread(plans, max_websites, messages, stop_flag, pause_flag) -> None:
 
                 messages.put(('query', plan.query))
 
-                results = search_google(browser, plan.query, RESULTS_PER_QUERY)
-                if not results and waiting():
-                    results = search_bing(browser, plan.query, RESULTS_PER_QUERY)
+                results, note = run_search(browser, plan.query,
+                                           RESULTS_PER_QUERY, state)
                 if not results:
-                    messages.put(('note', f'No results for: {plan.query}'))
+                    messages.put(('note', f'{note} — {plan.query[:70]}'))
+                    # Once every source has shut us out, more queries only
+                    # waste time. Stop and say why.
+                    if state.all_blocked:
+                        messages.put(('blocked', state.summary()))
+                        return
                     continue
 
-                messages.put(
-                    ('note', f'{len(results)} site(s) found for: {plan.query}'))
+                messages.put(('note', f'{note} for: {plan.query[:70]}'))
 
                 for title, url in results:
                     if not waiting() or visited >= max_websites:
@@ -865,6 +1096,7 @@ def _crawl_thread(plans, max_websites, messages, stop_flag, pause_flag) -> None:
             if visited >= max_websites:
                 messages.put(
                     ('note', f'Reached the limit of {max_websites} websites.'))
+            messages.put(('note', f'Search sources — {state.summary()}'))
     except Exception as exc:
         import traceback
         LOGGER.exception('Crawler thread failed')

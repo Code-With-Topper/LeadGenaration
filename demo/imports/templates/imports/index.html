@@ -1,97 +1,92 @@
 {% extends 'base.html' %}
-
-{% block title %}Import Leads - Lead CRM{% endblock %}
+{% load crm_extras %}
+{% block title %}Import Leads{% endblock %}
+{% block page_title %}Import Leads{% endblock %}
+{% block page_subtitle %}Upload a CSV or Excel file. Nothing is saved until you approve the preview.{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Import Leads</h3>
-            <div class="d-flex align-items-center mb-4">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb m-0 p-0">
-                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Imports</li>
-                    </ol>
-                </nav>
-            </div>
+<div class="row">
+  <div class="col-lg-5">
+    <div class="card"><div class="card-body">
+      <h6 class="card-title">Upload a file</h6>
+      <form method="post" action="{% url 'imports:upload' %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="mb-3">
+          <input type="file" name="file" class="form-control"
+                 accept=".csv,.xlsx,.xls,.xlsm" required>
+          <div class="form-text">CSV or Excel, up to 20 MB.</div>
         </div>
-    </div>
-    
-    <div class="row">
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-body">
-                    <h4 class="card-title">Upload File</h4>
-                    <p class="text-muted font-14">Upload a CSV or Excel (.xlsx) file containing your leads.</p>
-                    
-                    {% if messages %}
-                        {% for message in messages %}
-                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                                {{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                    
-                    <form action="{% url 'imports:upload' %}" method="POST" enctype="multipart/form-data">
-                        {% csrf_token %}
-                        <div class="mb-3">
-                            <input class="form-control" type="file" name="file" accept=".csv, .xlsx" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100"><i class="fa fa-upload me-1"></i> Upload & Map Columns</button>
-                    </form>
-                </div>
-            </div>
-            
-            <div class="card mt-4">
-                <div class="card-body">
-                    <h4 class="card-title">Export Data</h4>
-                    <p class="text-muted font-14">Download your CRM data to Excel.</p>
-                    <a href="{% url 'leads:export_leads' %}" class="btn btn-success w-100"><i class="fa fa-download me-1"></i> Export All Leads (.xlsx)</a>
-                </div>
-            </div>
-        </div>
-        
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-body">
-                    <h4 class="card-title">Recent Import Jobs</h4>
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead>
-                                <tr>
-                                    <th>File Name</th>
-                                    <th>Date</th>
-                                    <th>Status</th>
-                                    <th>Imported</th>
-                                    <th>Failed</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for job in jobs %}
-                                <tr>
-                                    <td>{{ job.file_name }}</td>
-                                    <td>{{ job.created_at|date:"M d, H:i" }}</td>
-                                    <td>
-                                        <span class="badge bg-{% if job.status == 'COMPLETED' %}success{% elif job.status == 'FAILED' %}danger{% else %}warning{% endif %}">
-                                            {{ job.status }}
-                                        </span>
-                                    </td>
-                                    <td>{{ job.imported_rows }}</td>
-                                    <td>{{ job.failed_rows }}</td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="5" class="text-center py-4">No import jobs found.</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+        <button class="btn btn-primary w-100">
+          <i data-feather="upload" class="feather-sm"></i> Upload and check</button>
+      </form>
+
+      <hr>
+      <p class="small text-muted mb-2">What happens next:</p>
+      <ol class="small text-muted ps-3 mb-3">
+        <li>We read the column headings and match them for you.</li>
+        <li>You confirm the matching.</li>
+        <li>A <strong>preview</strong> shows how many rows are new, how many are
+          duplicates and which are invalid — <strong>without saving anything</strong>.</li>
+        <li>You press Import only if the preview looks right.</li>
+      </ol>
+      <a href="{% url 'imports:sample_file' %}" class="btn btn-outline-secondary btn-sm w-100">
+        <i data-feather="download" class="feather-sm"></i> Download a template file</a>
+    </div></div>
+  </div>
+
+  <div class="col-lg-7">
+    <div class="card"><div class="card-body">
+      <h6 class="card-title">Past imports</h6>
+      {% if jobs %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle responsive-stack">
+          <thead><tr>
+            <th>File</th><th>Rows</th><th>Result</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody>
+          {% for job in jobs %}
+          <tr>
+            <td data-label="File" class="wrap-any">
+              {{ job.file_name }}
+              <div class="text-muted small">{{ job.created_at|date:"d M Y, H:i" }}</div>
+            </td>
+            <td data-label="Rows">{{ job.total_rows }}</td>
+            <td data-label="Result" class="small">
+              {% if job.status == 'COMPLETED' or job.status == 'PREVIEWED' %}
+                <span class="text-success">{{ job.created_rows }} new</span> ·
+                <span class="text-info">{{ job.merged_rows }} merged</span> ·
+                <span class="text-warning">{{ job.review_rows }} review</span> ·
+                <span class="text-secondary">{{ job.rejected_rows }} rejected</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td data-label="Status">
+              <span class="badge bg-{% if job.status == 'COMPLETED' %}success{% elif job.status == 'FAILED' %}danger{% elif job.status == 'RUNNING' or job.status == 'QUEUED' %}info{% else %}secondary{% endif %}">
+                {{ job.get_status_display }}</span>
+            </td>
+            <td data-label="" class="text-end text-nowrap">
+              {% if job.status == 'UPLOADED' or job.status == 'MAPPED' %}
+              <a href="{% url 'imports:map_columns' job.id %}" class="btn btn-sm btn-primary">Continue</a>
+              {% elif job.status == 'PREVIEWED' %}
+              <a href="{% url 'imports:preview' job.id %}" class="btn btn-sm btn-primary">Review</a>
+              {% endif %}
+              {% if job.rejected_rows %}
+              <a href="{% url 'imports:download_rejected' job.id %}"
+                 class="btn btn-sm btn-outline-secondary">Rejected rows</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% if job.error_log %}
+          <tr><td colspan="5" class="small text-danger">{{ job.error_log|truncatechars:200 }}</td></tr>
+          {% endif %}
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% include 'partials/pagination.html' %}
+      {% else %}
+        {% include 'partials/empty.html' with icon='upload' title='No imports yet' hint='Upload your first CSV file on the left.' %}
+      {% endif %}
+    </div></div>
+  </div>
 </div>
 {% endblock %}

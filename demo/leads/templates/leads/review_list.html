@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% load crm_extras %}
+{% block title %}Duplicate Review{% endblock %}
+{% block page_title %}Duplicate Review{% endblock %}
+{% block page_subtitle %}
+Records that look like the same company. Obvious matches are merged
+automatically — these are the ones worth a human eye.
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <ul class="nav nav-pills mb-3">
+      <li class="nav-item"><a class="nav-link {% if show == 'pending' %}active{% endif %}"
+        href="?show=pending">Waiting ({{ pending_count }})</a></li>
+      <li class="nav-item"><a class="nav-link {% if show == 'done' %}active{% endif %}"
+        href="?show=done">Already decided</a></li>
+      <li class="nav-item"><a class="nav-link {% if show == 'all' %}active{% endif %}"
+        href="?show=all">All</a></li>
+    </ul>
+
+    {% if reviews %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle responsive-stack">
+        <thead><tr>
+          <th>New record</th><th>Looks like</th><th>Why</th><th>Match</th>
+          <th>Status</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for review in reviews %}
+        <tr>
+          <td data-label="New record" class="fw-semibold wrap-any">
+            {{ review.incoming.company_name|dash }}
+            <div class="text-muted small">{{ review.origin|dash }}</div>
+          </td>
+          <td data-label="Looks like" class="wrap-any">
+            {% with open_lead=review.existing_company.open_lead %}
+            {% if open_lead %}
+            <a href="{% url 'leads:detail' open_lead.id %}">
+              {{ review.existing_company.company_name }}</a>
+            {% else %}{{ review.existing_company.company_name }}{% endif %}
+            {% endwith %}
+          </td>
+          <td data-label="Why" class="small text-muted">{{ review.match_reason|dash }}</td>
+          <td data-label="Match">
+            <span class="badge bg-{% if review.match_score >= 75 %}warning text-dark{% else %}secondary{% endif %}">
+              {{ review.match_score }}%</span>
+          </td>
+          <td data-label="Status">
+            {% if review.is_pending %}
+            <span class="badge bg-warning text-dark">Waiting</span>
+            {% else %}
+            <span class="badge bg-success">{{ review.get_status_display }}</span>
+            {% endif %}
+          </td>
+          <td data-label="" class="text-end">
+            <a href="{% url 'leads:review_detail' review.id %}"
+               class="btn btn-sm {% if review.is_pending %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+              {% if review.is_pending %}Decide{% else %}View{% endif %}</a>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include 'partials/pagination.html' %}
+    {% else %}
+      {% include 'partials/empty.html' with icon='check-circle' title='Nothing to review' hint='Every duplicate the system found has been handled.' %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

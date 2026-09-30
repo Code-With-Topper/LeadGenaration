@@ -1,225 +1,341 @@
-import uuid
-import datetime
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib import messages
-from django.http import HttpResponse
-from django.core.mail import EmailMessage
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
+"""
+Quotations.
+
+Amounts are in rupees and money is handled with Decimal, never float — a
+rounding error on a quotation is a rounding error the client has to explain to
+their customer.
+"""
 import io
-from .models import Quotation, QuotationItem
+import uuid
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
+
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_POST
+
 from leads.models import Lead
 
-def quotation_list(request):
-    quotations = Quotation.objects.all().order_by('-created_at')
-    return render(request, 'quotations/list.html', {'quotations': quotations})
+from .models import Quotation, QuotationItem
 
+TWO_PLACES = Decimal('0.01')
+
+
+def to_decimal(value, default='0'):
+    """Parse a form field into a Decimal without ever raising."""
+    try:
+        return Decimal(str(value).strip() or default)
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal(default)
+
+
+@login_required
+def quotation_list(request):
+    quotations = Quotation.objects.select_related('company', 'lead')
+    status = request.GET.get('status') or ''
+    if status in dict(Quotation.STATUS_CHOICES):
+        quotations = quotations.filter(status=status)
+
+    page = Paginator(quotations, settings.PAGE_SIZE).get_page(request.GET.get('page'))
+    return render(request, 'quotations/list.html', {
+        'page_obj': page,
+        'quotations': page.object_list,
+        'status': status,
+        'status_choices': Quotation.STATUS_CHOICES,
+        'total': quotations.count(),
+    })
+
+
+@login_required
 def create_quotation(request, lead_id):
-    lead = get_object_or_404(Lead, id=lead_id)
+    lead = get_object_or_404(Lead.objects.select_related('company'), id=lead_id)
     company = lead.company
-    contact = company.contacts.first()
-    
+
     if request.method == 'POST':
-        valid_until = request.POST.get('valid_until')
-        terms = request.POST.get('terms')
-        notes = request.POST.get('notes')
-        
-        # Read arrays of items
         descriptions = request.POST.getlist('description[]')
         quantities = request.POST.getlist('quantity[]')
         rates = request.POST.getlist('rate[]')
         taxes = request.POST.getlist('tax[]')
         discounts = request.POST.getlist('discount[]')
-        
-        # Generate ID
-        q_num = f"QT-{datetime.datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
-        
+
+        rows = []
+        for description, quantity, rate, tax, discount in zip(
+                descriptions, quantities, rates, taxes, discounts):
+            if not description.strip():
+                continue
+            rows.append({
+                'description': description.strip()[:255],
+                'quantity': to_decimal(quantity, '1'),
+                'rate': to_decimal(rate),
+                'tax': to_decimal(tax),
+                'discount': to_decimal(discount),
+            })
+
+        if not rows:
+            messages.error(request, 'Add at least one line item.')
+            return render(request, 'quotations/create.html',
+                          {'lead': lead, 'company': company})
+
         quotation = Quotation.objects.create(
-            quotation_number=q_num,
+            quotation_number=f"QT-{datetime.now():%Y%m%d}-{uuid.uuid4().hex[:4].upper()}",
             company=company,
             lead=lead,
-            contact=contact,
-            valid_until=valid_until or None,
-            terms=terms,
-            notes=notes,
-            status='DRAFT'
+            contact=lead.contact or company.contacts.exclude(name='').first(),
+            valid_until=parse_date(
+                (request.POST.get('valid_until') or '').strip()),
+            terms=request.POST.get('terms') or '',
+            notes=request.POST.get('notes') or '',
+            status='DRAFT',
+            created_by=request.user if request.user.is_authenticated else None,
         )
-        
-        subtotal_sum = 0
-        tax_sum = 0
-        discount_sum = 0
-        
-        for d, q, r, t, disc in zip(descriptions, quantities, rates, taxes, discounts):
-            if not d.strip(): continue
-            qty = float(q)
-            rate = float(r)
-            tax_pct = float(t)
-            disc_amt = float(disc)
-            
-            row_gross = qty * rate
-            row_tax = (row_gross - disc_amt) * (tax_pct / 100.0)
-            row_total = row_gross - disc_amt + row_tax
-            
+
+        subtotal = tax_total = discount_total = Decimal('0')
+        for row in rows:
+            gross = (row['quantity'] * row['rate']).quantize(TWO_PLACES)
+            taxable = max(gross - row['discount'], Decimal('0'))
+            row_tax = (taxable * row['tax'] / Decimal('100')).quantize(TWO_PLACES)
             QuotationItem.objects.create(
                 quotation=quotation,
-                description=d,
-                quantity=qty,
-                rate=rate,
-                tax_percentage=tax_pct,
-                discount_amount=disc_amt,
-                total_price=row_total
+                description=row['description'],
+                quantity=row['quantity'],
+                rate=row['rate'],
+                tax_percentage=row['tax'],
+                discount_amount=row['discount'],
+                total_price=(taxable + row_tax).quantize(TWO_PLACES),
             )
-            
-            subtotal_sum += row_gross
-            tax_sum += row_tax
-            discount_sum += disc_amt
-            
-        quotation.subtotal = subtotal_sum
-        quotation.tax_total = tax_sum
-        quotation.discount_total = discount_sum
-        quotation.total_amount = subtotal_sum - discount_sum + tax_sum
+            subtotal += gross
+            discount_total += row['discount']
+            tax_total += row_tax
+
+        quotation.subtotal = subtotal.quantize(TWO_PLACES)
+        quotation.discount_total = discount_total.quantize(TWO_PLACES)
+        quotation.tax_total = tax_total.quantize(TWO_PLACES)
+        quotation.total_amount = (subtotal - discount_total + tax_total) \
+            .quantize(TWO_PLACES)
         quotation.save()
-        
-        # Update Lead Status
-        if lead.status in ['NEW', 'CONTACTED', 'FOLLOW_UP', 'REQUIREMENT', 'INTERESTED', 'REQUIREMENT_RECEIVED']:
-            lead.status = 'QUOTATION_SENT'
-            lead.save()
-            
+
+        # Sending a quotation means the requirement is known.
+        if lead.status in (Lead.NEW, Lead.CALLED, Lead.PROFILE_SENT,
+                           Lead.FOLLOW_UP_DUE):
+            lead.status = Lead.REQUIREMENT_RECEIVED
+            lead.save(update_fields=['status', 'updated_at'])
+
         from reports.utils import log_audit
-        log_audit(
-            action='Quotation Created',
-            model_name='Quotation',
-            object_id=quotation.id,
-            changes=f"Created Quote {q_num} for ${quotation.total_amount}",
-            user=request.user if request.user.is_authenticated else None
-        )
-            
-        messages.success(request, f"Quotation {q_num} created successfully.")
+        log_audit('Quotation Created', 'Quotation', quotation.id,
+                  f'{quotation.quotation_number} for Rs {quotation.total_amount}',
+                  request.user)
+
+        messages.success(request, f'Quotation {quotation.quotation_number} created.')
         return redirect('quotations:view_quotation', quotation_id=quotation.id)
-        
-    return render(request, 'quotations/create.html', {'lead': lead, 'company': company})
 
+    return render(request, 'quotations/create.html',
+                  {'lead': lead, 'company': company})
+
+
+@login_required
 def view_quotation(request, quotation_id):
-    quotation = get_object_or_404(Quotation, id=quotation_id)
-    return render(request, 'quotations/view.html', {'quotation': quotation})
+    quotation = get_object_or_404(
+        Quotation.objects.select_related('company', 'lead', 'contact'),
+        id=quotation_id)
+    return render(request, 'quotations/view.html', {
+        'quotation': quotation,
+        'items': quotation.items.all(),
+    })
 
+
+@login_required
 def generate_pdf(request, quotation_id):
+    """A one-page PDF quotation, in rupees."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas
+
     quotation = get_object_or_404(Quotation, id=quotation_id)
-    
+    company = quotation.company
+    plant = company.primary_plant
+
     buffer = io.BytesIO()
-    p = canvas.Canvas(buffer, pagesize=A4)
+    pdf = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
-    
-    # Title
-    p.setFont("Helvetica-Bold", 20)
-    p.drawString(50, height - 50, "QUOTATION")
-    
-    # Details
-    p.setFont("Helvetica", 12)
-    p.drawString(50, height - 90, f"Number: {quotation.quotation_number}")
-    p.drawString(50, height - 110, f"Date: {quotation.date.strftime('%Y-%m-%d')}")
+    left, right = 18 * mm, width - 18 * mm
+    y = height - 20 * mm
+
+    def line(label, value, offset=5 * mm, bold=False, size=9):
+        nonlocal y
+        pdf.setFont('Helvetica-Bold' if bold else 'Helvetica', size)
+        pdf.drawString(left, y, f'{label}{value}')
+        y -= offset
+
+    pdf.setFont('Helvetica-Bold', 16)
+    pdf.drawString(left, y, settings.COMPANY_NAME)
+    pdf.setFont('Helvetica', 9)
+    pdf.drawRightString(right, y, 'QUOTATION')
+    y -= 6 * mm
+    pdf.setFont('Helvetica', 8)
+    pdf.drawString(left, y, settings.COMPANY_ADDRESS)
+    pdf.drawRightString(right, y, quotation.quotation_number)
+    y -= 4 * mm
+    pdf.drawRightString(right, y, f'Date: {quotation.date:%d %b %Y}')
+    y -= 10 * mm
+
+    pdf.line(left, y, right, y)
+    y -= 7 * mm
+
+    line('To: ', company.company_name, bold=True, size=10)
+    if quotation.contact and quotation.contact.name:
+        line('Attn: ', quotation.contact.name)
+    if plant and plant.full_address:
+        line('', plant.full_address[:95])
+    if company.gstin:
+        line('GSTIN: ', company.gstin)
     if quotation.valid_until:
-        p.drawString(50, height - 130, f"Valid Until: {quotation.valid_until.strftime('%Y-%m-%d')}")
-        
-    p.drawString(350, height - 90, f"To: {quotation.company.company_name}")
-    if quotation.contact:
-        p.drawString(350, height - 110, f"Attn: {quotation.contact.name}")
-        
-    # Table Header
-    y = height - 180
-    p.setFont("Helvetica-Bold", 10)
-    p.drawString(50, y, "Description")
-    p.drawString(300, y, "Qty")
-    p.drawString(350, y, "Rate")
-    p.drawString(410, y, "Tax/Disc")
-    p.drawString(480, y, "Total")
-    p.line(50, y-5, 540, y-5)
-    
-    # Items
-    y -= 25
-    p.setFont("Helvetica", 10)
+        line('Valid until: ', f'{quotation.valid_until:%d %b %Y}')
+
+    y -= 4 * mm
+    columns = [left, left + 88 * mm, left + 106 * mm, left + 130 * mm,
+               left + 148 * mm]
+    pdf.setFont('Helvetica-Bold', 8)
+    for label, x in zip(['Description', 'Qty', 'Rate', 'Tax %', 'Amount'], columns):
+        pdf.drawString(x, y, label)
+    y -= 2 * mm
+    pdf.line(left, y, right, y)
+    y -= 5 * mm
+
+    pdf.setFont('Helvetica', 8)
     for item in quotation.items.all():
-        p.drawString(50, y, str(item.description)[:40])
-        p.drawString(300, y, str(item.quantity))
-        p.drawString(350, y, f"${item.rate}")
-        p.drawString(410, y, f"{item.tax_percentage}% / ${item.discount_amount}")
-        p.drawString(480, y, f"${item.total_price}")
-        y -= 20
-        
-    p.line(50, y, 540, y)
-    y -= 20
-    
-    # Totals
-    p.setFont("Helvetica-Bold", 10)
-    p.drawString(350, y, "Subtotal:")
-    p.drawString(480, y, f"${quotation.subtotal}")
-    y -= 15
-    p.drawString(350, y, "Discount:")
-    p.drawString(480, y, f"-${quotation.discount_total}")
-    y -= 15
-    p.drawString(350, y, "Tax:")
-    p.drawString(480, y, f"+${quotation.tax_total}")
-    y -= 20
-    p.setFont("Helvetica-Bold", 12)
-    p.drawString(350, y, "Grand Total:")
-    p.drawString(480, y, f"${quotation.total_amount}")
-    
-    # Terms
-    y -= 60
+        if y < 45 * mm:                     # start a new page before overflowing
+            pdf.showPage()
+            y = height - 20 * mm
+            pdf.setFont('Helvetica', 8)
+        pdf.drawString(columns[0], y, str(item.description)[:52])
+        pdf.drawString(columns[1], y, f'{item.quantity:g}')
+        pdf.drawString(columns[2], y, f'{item.rate:,.2f}')
+        pdf.drawString(columns[3], y, f'{item.tax_percentage:g}')
+        pdf.drawRightString(right, y, f'{item.total_price:,.2f}')
+        y -= 5 * mm
+
+    pdf.line(left, y, right, y)
+    y -= 6 * mm
+
+    for label, amount, bold in (
+        ('Subtotal', quotation.subtotal, False),
+        ('Discount', -quotation.discount_total, False),
+        ('Tax', quotation.tax_total, False),
+        ('Grand Total (INR)', quotation.total_amount, True),
+    ):
+        pdf.setFont('Helvetica-Bold' if bold else 'Helvetica', 10 if bold else 8)
+        pdf.drawRightString(right - 30 * mm, y, f'{label}:')
+        pdf.drawRightString(right, y, f'{amount:,.2f}')
+        y -= 5 * mm
+
     if quotation.terms:
-        p.setFont("Helvetica-Bold", 10)
-        p.drawString(50, y, "Terms:")
-        y -= 15
-        p.setFont("Helvetica", 10)
-        p.drawString(50, y, str(quotation.terms)[:100])
-        y -= 20
-        
+        y -= 5 * mm
+        pdf.setFont('Helvetica-Bold', 8)
+        pdf.drawString(left, y, 'Terms')
+        y -= 4 * mm
+        pdf.setFont('Helvetica', 7)
+        for chunk in _wrap(str(quotation.terms), 120)[:6]:
+            pdf.drawString(left, y, chunk)
+            y -= 3.5 * mm
+
     if quotation.notes:
-        p.setFont("Helvetica-Bold", 10)
-        p.drawString(50, y, "Notes:")
-        y -= 15
-        p.setFont("Helvetica", 10)
-        p.drawString(50, y, str(quotation.notes)[:100])
-        
-    p.showPage()
-    p.save()
+        y -= 3 * mm
+        pdf.setFont('Helvetica-Bold', 8)
+        pdf.drawString(left, y, 'Notes')
+        y -= 4 * mm
+        pdf.setFont('Helvetica', 7)
+        for chunk in _wrap(str(quotation.notes), 120)[:6]:
+            pdf.drawString(left, y, chunk)
+            y -= 3.5 * mm
+
+    pdf.showPage()
+    pdf.save()
     buffer.seek(0)
-    
+
     response = HttpResponse(buffer, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="Quotation_{quotation.quotation_number}.pdf"'
+    response['Content-Disposition'] = (
+        f'attachment; filename="{quotation.quotation_number}.pdf"')
     return response
 
+
+@login_required
+@require_POST
 def send_quotation(request, quotation_id):
+    """
+    Email a quotation.
+
+    Goes through the same send service as every other message, so the daily
+    cap and the unsubscribe list apply here too.
+    """
+    from emails.services import send_to_lead
+
     quotation = get_object_or_404(Quotation, id=quotation_id)
-    recipient = quotation.company.company_email
-    
-    if not recipient:
-        messages.error(request, "Company has no email address.")
+    lead = quotation.lead or quotation.company.leads.first()
+
+    if lead is None:
+        messages.error(request, 'This quotation has no lead to email.')
         return redirect('quotations:view_quotation', quotation_id=quotation.id)
-        
-    # Generate PDF in memory
-    buffer = io.BytesIO()
-    p = canvas.Canvas(buffer, pagesize=A4)
-    p.drawString(100, 750, f"QUOTATION {quotation.quotation_number}")
-    p.drawString(100, 730, f"Total: ${quotation.total_amount}")
-    p.showPage()
-    p.save()
-    pdf_bytes = buffer.getvalue()
-    
-    try:
-        email = EmailMessage(
-            subject=f"Quotation #{quotation.quotation_number} from our Company",
-            body=f"Please find attached your quotation #{quotation.quotation_number}.\n\nTotal: ${quotation.total_amount}\n\nBest Regards,\nSales Team",
-            to=[recipient],
-        )
-        email.attach(f'Quotation_{quotation.quotation_number}.pdf', pdf_bytes, 'application/pdf')
-        email.send()
-        
+
+    body = (
+        f"Dear {quotation.contact.name if quotation.contact and quotation.contact.name else 'Sir/Madam'},\n\n"
+        f"Please find our quotation {quotation.quotation_number} "
+        f"for a total of Rs {quotation.total_amount:,.2f}.\n\n"
+        f"{quotation.notes or ''}\n\n"
+        f"Regards,\n{settings.COMPANY_NAME}"
+    )
+
+    result = send_to_lead(
+        lead,
+        subject=f'Quotation {quotation.quotation_number} — {settings.COMPANY_NAME}',
+        body=body,
+        user=request.user,
+    )
+
+    if result.ok:
         quotation.status = 'SENT'
-        quotation.save()
-        messages.success(request, f"Quotation emailed successfully to {recipient}.")
-    except Exception as e:
-        messages.error(request, f"Failed to send email: {e}")
-        
+        quotation.save(update_fields=['status', 'updated_at'])
+        messages.success(request, result.message)
+    else:
+        messages.error(request, result.message)
+
     return redirect('quotations:view_quotation', quotation_id=quotation.id)
+
+
+@login_required
+@require_POST
+def update_status(request, quotation_id):
+    quotation = get_object_or_404(Quotation, id=quotation_id)
+    status = request.POST.get('status')
+    if status not in dict(Quotation.STATUS_CHOICES):
+        messages.error(request, 'Unknown status.')
+    else:
+        quotation.status = status
+        quotation.save(update_fields=['status', 'updated_at'])
+        if status == 'ACCEPTED' and quotation.lead:
+            quotation.lead.status = Lead.CONVERTED
+            quotation.lead.follow_up_date = None
+            quotation.lead.save(update_fields=['status', 'follow_up_date',
+                                               'updated_at'])
+            messages.success(request, 'Quotation accepted — lead marked Converted.')
+        else:
+            messages.success(request, f'Quotation marked {quotation.get_status_display()}.')
+    return redirect('quotations:view_quotation', quotation_id=quotation.id)
+
+
+def _wrap(text, width):
+    """Crude word wrap for the PDF, which has no flowable text."""
+    words, lines, current = text.split(), [], ''
+    for word in words:
+        if len(current) + len(word) + 1 > width:
+            lines.append(current)
+            current = word
+        else:
+            current = f'{current} {word}'.strip()
+    if current:
+        lines.append(current)
+    return lines

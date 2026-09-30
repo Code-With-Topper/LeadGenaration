@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}Email Templates{% endblock %}
+{% block page_title %}Email Templates{% endblock %}
+{% block page_subtitle %}Write once, send in two clicks{% endblock %}
+{% block page_actions %}
+<a href="{% url 'emails:template_create' %}" class="btn btn-primary btn-sm">
+  <i data-feather="plus" class="feather-sm"></i> New template</a>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+{% for template in templates %}
+  <div class="col-md-6 mb-3">
+    <div class="card h-100"><div class="card-body">
+      <div class="d-flex justify-content-between align-items-start">
+        <h6 class="card-title mb-1">{{ template.name }}
+          {% if template.is_default %}
+          <span class="badge bg-primary">default</span>{% endif %}
+        </h6>
+        <div class="d-flex gap-1">
+          <a href="{% url 'emails:template_edit' template.id %}"
+             class="btn btn-sm btn-outline-secondary">Edit</a>
+          <form method="post" action="{% url 'emails:template_delete' template.id %}"
+                onsubmit="return confirm('Delete this template?')">
+            {% csrf_token %}
+            <button class="btn btn-sm btn-outline-danger">Delete</button>
+          </form>
+        </div>
+      </div>
+      <p class="small text-muted mb-2"><strong>Subject:</strong> {{ template.subject }}</p>
+      <pre class="small bg-light p-2 rounded mb-0"
+           style="white-space:pre-wrap;max-height:180px;overflow:auto">{{ template.body }}</pre>
+    </div></div>
+  </div>
+{% empty %}
+  <div class="col-12">
+    {% include 'partials/empty.html' with icon='file-plus' title='No templates yet' hint='Create one so you are not retyping the same email.' action_url='/emails/templates/new/' action_label='New template' %}
+  </div>
+{% endfor %}
+</div>
+{% endblock %}

@@ -1,6 +1,4 @@
 from django.db import models
-from leads.models import Lead, Company, Contact
-from django.contrib.auth.models import User
 
 class Quotation(models.Model):
     STATUS_CHOICES = [
@@ -14,9 +12,9 @@ class Quotation(models.Model):
     ]
 
     quotation_number = models.CharField(max_length=100, unique=True)
-    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='quotations')
-    lead = models.ForeignKey(Lead, on_delete=models.SET_NULL, null=True, blank=True, related_name='quotations')
-    contact = models.ForeignKey(Contact, on_delete=models.SET_NULL, null=True, blank=True)
+    company = models.ForeignKey('leads.Company', on_delete=models.CASCADE, related_name='quotations')
+    lead = models.ForeignKey('leads.Lead', on_delete=models.SET_NULL, null=True, blank=True, related_name='quotations')
+    contact = models.ForeignKey('leads.Contact', on_delete=models.SET_NULL, null=True, blank=True)
     
     date = models.DateField(auto_now_add=True)
     valid_until = models.DateField(blank=True, null=True)
@@ -26,14 +24,17 @@ class Quotation(models.Model):
     discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     
-    terms = models.TextField(blank=True, null=True, default="Standard terms and conditions apply.")
-    notes = models.TextField(blank=True, null=True)
+    terms = models.TextField(blank=True, default='Standard terms and conditions apply.')
+    notes = models.TextField(blank=True, default='')
     
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='DRAFT')
     
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
 
     def __str__(self):
         return f"Quotation {self.quotation_number} for {self.company}"

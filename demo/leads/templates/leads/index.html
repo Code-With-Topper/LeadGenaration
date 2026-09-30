@@ -1,79 +1,121 @@
 {% extends 'base.html' %}
-
-{% block title %}All Leads - Lead CRM{% endblock %}
+{% load crm_extras %}
+{% block title %}All Leads{% endblock %}
+{% block page_title %}All Leads{% endblock %}
+{% block page_subtitle %}{{ total }} lead{{ total|pluralize }} found{% endblock %}
+{% block page_actions %}
+<a href="{% url 'leads:export_leads' %}{% if status %}?status={{ status }}{% endif %}"
+   class="btn btn-outline-secondary btn-sm">
+  <i data-feather="download" class="feather-sm"></i> Export</a>
+<a href="{% url 'imports:index' %}" class="btn btn-primary btn-sm">
+  <i data-feather="upload" class="feather-sm"></i> Import</a>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">All Leads</h3>
-            <div class="d-flex align-items-center mb-4">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb m-0 p-0">
-                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">All Leads</li>
-                    </ol>
-                </nav>
-            </div>
-        </div>
+{% if pending_reviews %}
+<div class="alert alert-warning d-flex justify-content-between align-items-center">
+  <span>{{ pending_reviews }} possible duplicate{{ pending_reviews|pluralize }}
+    waiting for your decision.</span>
+  <a href="{% url 'leads:review_list' %}" class="btn btn-sm btn-dark">Review now</a>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body">
+    <form method="get" class="row g-2 mb-3">
+      <div class="col-12 col-md-4">
+        <input type="search" name="q" value="{{ search }}" class="form-control"
+               placeholder="Company, phone, email, CIN, GSTIN, person…">
+      </div>
+      <div class="col-6 col-md-2">
+        <select name="status" class="form-select">
+          <option value="">Any status</option>
+          {% for value, label in status_choices %}
+          <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <select name="band" class="form-select">
+          <option value="">Any quality</option>
+          <option value="A" {% if band == 'A' %}selected{% endif %}>A — ready to contact</option>
+          <option value="B" {% if band == 'B' %}selected{% endif %}>B — usable</option>
+          <option value="C" {% if band == 'C' %}selected{% endif %}>C — thin</option>
+          <option value="D" {% if band == 'D' %}selected{% endif %}>D — needs work</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-2">
+        <select name="district" class="form-select">
+          <option value="">Any district</option>
+          {% for name in districts %}
+          <option value="{{ name }}" {% if district == name %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-6 col-md-2 d-grid">
+        <button class="btn btn-primary">Search</button>
+      </div>
+    </form>
+
+    {% if leads %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle responsive-stack">
+        <thead><tr>
+          <th>Company</th><th>Location</th><th>Phone</th><th>Email</th>
+          <th>Quality</th><th>Status</th><th>Follow-up</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for lead in leads %}
+        <tr>
+          <td data-label="Company">
+            <a href="{% url 'leads:detail' lead.id %}" class="fw-semibold">
+              {{ lead.company.company_name }}</a>
+            <div class="text-muted small">{{ lead.company.industry|dash }}</div>
+          </td>
+          <td data-label="Location" class="small">{{ lead.company.location|dash }}</td>
+          <td data-label="Phone" class="small">
+            {% if lead.company.company_phone %}
+            <a href="tel:{{ lead.company.company_phone }}">{{ lead.company.company_phone }}</a>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td data-label="Email" class="small wrap-any">
+            {{ lead.company.company_email|dash }}
+            {% if lead.company.email_status == 'MX_OK' %}
+            <i data-feather="check-circle" class="feather-sm text-success"
+               title="Domain accepts mail"></i>
+            {% endif %}
+          </td>
+          <td data-label="Quality">
+            {% with band=lead.company.quality_band %}
+            <span class="band-pill band-{{ band.0 }}" title="{{ band.1 }}">
+              {{ band.0 }} · {{ lead.company.data_quality_score }}</span>
+            {% endwith %}
+          </td>
+          <td data-label="Status">
+            <span class="badge bg-{{ lead.status|status_colour }}">{{ lead.get_status_display }}</span>
+          </td>
+          <td data-label="Follow-up" class="small">
+            {% if lead.follow_up_date %}
+            <span class="{% if lead.is_follow_up_overdue %}text-danger fw-bold{% endif %}">
+              {{ lead.follow_up_date|date:"d M Y" }}</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td data-label="" class="text-end text-nowrap">
+            <a href="{% url 'leads:detail' lead.id %}" class="btn btn-outline-secondary btn-sm">Open</a>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
     </div>
-    
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover table-striped mb-0">
-                            <thead class="bg-primary text-white">
-                                <tr>
-                                    <th scope="col">Company</th>
-                                    <th scope="col">Industry</th>
-                                    <th scope="col">City</th>
-                                    <th scope="col">Email</th>
-                                    <th scope="col">Phone</th>
-                                    <th scope="col">Completeness</th>
-                                    <th scope="col">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for lead in leads %}
-                                <tr onclick="window.location='{% url 'leads:detail' lead.id %}';" style="cursor: pointer;">
-                                    <td class="font-weight-medium text-dark">{{ lead.company.company_name }}</td>
-                                    <td>{{ lead.company.industry }}</td>
-                                    <td>
-                                        {% if lead.company.plants.first %}
-                                            {{ lead.company.plants.first.city }}
-                                        {% else %}
-                                            <span class="text-muted">N/A</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ lead.company.company_email|default:"<span class='text-muted'>NOT FOUND</span>"|safe }}</td>
-                                    <td>{{ lead.company.company_phone|default:"<span class='text-muted'>NOT FOUND</span>"|safe }}</td>
-                                    <td>
-                                        <div class="progress" style="height: 10px; margin-top: 5px;">
-                                            <div class="progress-bar {% if lead.completeness_percentage >= 80 %}bg-success{% elif lead.completeness_percentage >= 50 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ lead.completeness_percentage }}%;" aria-valuenow="{{ lead.completeness_percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
-                                        </div>
-                                        <small class="text-muted">{{ lead.completeness_percentage }}%</small>
-                                    </td>
-                                    <td>
-                                        <span class="badge {% if lead.status == 'NEW' %}bg-primary{% elif lead.status == 'CONVERTED' %}bg-success{% else %}bg-secondary{% endif %}">
-                                            {{ lead.status }}
-                                        </span>
-                                    </td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="7" class="text-center py-4">
-                                        <h5 class="text-muted">No leads found. Go to Lead Generation to start scraping!</h5>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    {% include 'partials/pagination.html' %}
+    {% else %}
+      {% if search or status or band or district %}
+        {% include 'partials/empty.html' with icon='search' title='No leads match those filters' hint='Try clearing the search box or choosing Any status.' %}
+      {% else %}
+        {% include 'partials/empty.html' with icon='users' title='No leads yet' hint='Import a CSV file or run lead generation to get started.' action_url='/imports/' action_label='Import leads' %}
+      {% endif %}
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

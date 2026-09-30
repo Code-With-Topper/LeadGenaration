@@ -1,76 +1,58 @@
 {% extends 'base.html' %}
-
-{% block title %}Map Columns - Lead CRM{% endblock %}
+{% load crm_extras %}
+{% block title %}Match Columns{% endblock %}
+{% block page_title %}Match your columns{% endblock %}
+{% block page_subtitle %}
+{{ job.file_name }} — we have matched what we could. Change anything that looks wrong.
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Map Columns</h3>
-            <div class="d-flex align-items-center mb-4">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb m-0 p-0">
-                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
-                        <li class="breadcrumb-item"><a href="{% url 'imports:index' %}">Imports</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Map Columns</li>
-                    </ol>
-                </nav>
-            </div>
-        </div>
+{% if sample_rows %}
+<div class="card"><div class="card-body">
+  <h6 class="card-title">First few rows of your file</h6>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered small mb-0">
+      <thead><tr>{% for column in columns %}<th>{{ column }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for row in sample_rows %}
+      <tr>{% for column in columns %}<td>{{ row|get_item:column|truncatechars:28 }}</td>{% endfor %}</tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div></div>
+{% endif %}
+
+<form method="post">
+  {% csrf_token %}
+  <div class="card"><div class="card-body">
+    <h6 class="card-title">Which column holds which detail?</h6>
+    <div class="row g-3">
+      {% for field, label, required in fields %}
+      <div class="col-12 col-md-6 col-xl-4">
+        <label class="form-label small">
+          {{ label }}{% if required %} <span class="text-danger">*</span>{% endif %}
+        </label>
+        <select name="map_{{ field }}" class="form-select form-select-sm"
+                {% if required %}required{% endif %}>
+          <option value="">— not in my file —</option>
+          {% for column in columns %}
+          <option value="{{ column }}"
+            {% if mapping|get_item:field == column %}selected{% endif %}>{{ column }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endfor %}
     </div>
-    
-    <div class="row">
-        <div class="col-md-8 mx-auto">
-            <div class="card">
-                <div class="card-body">
-                    <h4 class="card-title">Map File Columns</h4>
-                    <p class="text-muted font-14">Map the columns from your uploaded file ({{ job.file_name }}) to the CRM fields.</p>
-                    
-                    {% if messages %}
-                        {% for message in messages %}
-                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                                {{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                    
-                    <form action="{% url 'imports:map_columns' job.id %}" method="POST">
-                        {% csrf_token %}
-                        <div class="table-responsive">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>CRM Field</th>
-                                        <th>Your File Column</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for field_id, field_name in expected_fields %}
-                                    <tr>
-                                        <td><strong>{{ field_name }}</strong></td>
-                                        <td>
-                                            <select name="map_{{ field_id }}" class="form-select" {% if field_id == 'company_name' %}required{% endif %}>
-                                                <option value="">-- Do Not Import --</option>
-                                                {% for col in columns %}
-                                                <option value="{{ col }}" {% if col|lower == field_name|lower or col|lower == field_id|lower %}selected{% endif %}>{{ col }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                        
-                        <div class="d-flex justify-content-between mt-4">
-                            <a href="{% url 'imports:index' %}" class="btn btn-light">Cancel</a>
-                            <button type="submit" class="btn btn-primary"><i class="fa fa-play me-1"></i> Start Import</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+    <p class="text-muted small mt-3 mb-0">
+      Only <strong>Company Name</strong> is required. Everything else is optional —
+      a row with fewer details is still imported, it just scores lower on quality.
+    </p>
+  </div></div>
+
+  <div class="d-flex flex-wrap gap-2">
+    <button class="btn btn-primary">Next: preview without saving</button>
+    <a href="{% url 'imports:index' %}" class="btn btn-link">Cancel</a>
+  </div>
+</form>
 {% endblock %}

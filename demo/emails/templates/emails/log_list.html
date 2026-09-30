@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% load crm_extras %}
+{% block title %}Email History{% endblock %}
+{% block page_title %}Email History{% endblock %}
+{% block page_subtitle %}
+{{ total_sent }} sent all time · {{ quota_used }} of {{ quota_limit }} today
+{% endblock %}
+
+{% block content %}
+<div class="card"><div class="card-body">
+  <ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link {% if not status %}active{% endif %}" href="?">All</a></li>
+    {% for value, label in status_choices %}
+    <li class="nav-item"><a class="nav-link {% if status == value %}active{% endif %}"
+      href="?status={{ value }}">{{ label }}</a></li>
+    {% endfor %}
+  </ul>
+
+  {% if logs %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle responsive-stack">
+      <thead><tr>
+        <th>When</th><th>Company</th><th>To</th><th>Subject</th><th>Result</th>
+      </tr></thead>
+      <tbody>
+      {% for log in logs %}
+      <tr>
+        <td data-label="When" class="small text-nowrap">{{ log.sent_at|date:"d M Y, H:i" }}</td>
+        <td data-label="Company" class="wrap-any">
+          <a href="{% url 'leads:detail' log.lead_id %}">{{ log.lead.company.company_name }}</a>
+        </td>
+        <td data-label="To" class="small wrap-any">{{ log.recipient }}</td>
+        <td data-label="Subject" class="small wrap-any">{{ log.subject|truncatechars:70 }}</td>
+        <td data-label="Result">
+          <span class="badge bg-{% if log.status == 'SENT' %}success{% elif log.status == 'FAILED' %}danger{% else %}secondary{% endif %}">
+            {{ log.get_status_display }}</span>
+          {% if log.error_message %}
+          <div class="small text-muted wrap-any">{{ log.error_message|truncatechars:90 }}</div>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include 'partials/pagination.html' %}
+  {% else %}
+    {% include 'partials/empty.html' with icon='mail' title='No emails yet' hint='Open a lead and press Send Email.' %}
+  {% endif %}
+</div></div>
+{% endblock %}

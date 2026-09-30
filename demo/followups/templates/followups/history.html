@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% load crm_extras %}
+{% block title %}Follow-up History{% endblock %}
+{% block page_title %}Follow-up History{% endblock %}
+
+{% block content %}
+<div class="card"><div class="card-body">
+  {% if tasks %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle responsive-stack">
+      <thead><tr><th>Date</th><th>Company</th><th>Type</th><th>Note</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for task in tasks %}
+      <tr>
+        <td data-label="Date" class="small">{{ task.date|date:"d M Y" }}</td>
+        <td data-label="Company" class="wrap-any">
+          <a href="{% url 'leads:detail' task.lead_id %}">{{ task.company_name }}</a></td>
+        <td data-label="Type" class="small">{{ task.get_follow_up_type_display }}</td>
+        <td data-label="Note" class="small text-muted wrap-any">{{ task.notes|dash }}</td>
+        <td data-label="Status">
+          <span class="badge bg-{% if task.status == 'COMPLETED' %}success{% else %}secondary{% endif %}">
+            {{ task.get_status_display }}</span></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include 'partials/pagination.html' %}
+  {% else %}
+    {% include 'partials/empty.html' with icon='calendar' title='No completed follow-ups yet' %}
+  {% endif %}
+</div></div>
+{% endblock %}

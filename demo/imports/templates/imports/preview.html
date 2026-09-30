@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% load crm_extras %}
+{% block title %}Import Preview{% endblock %}
+{% block page_title %}Preview — nothing has been saved yet{% endblock %}
+{% block page_subtitle %}{{ job.file_name }} · {{ result.total_rows }} rows read{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-6 col-md-3 mb-3">
+    <div class="card h-100 stat-tile" style="border-left-color:var(--bs-success)">
+      <div class="card-body py-3">
+        <div class="count text-success">{{ result.created }}</div>
+        <div class="text-muted small">New companies</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 mb-3">
+    <div class="card h-100 stat-tile" style="border-left-color:var(--bs-info)">
+      <div class="card-body py-3">
+        <div class="count text-info">{{ result.merged }}</div>
+        <div class="text-muted small">Duplicates — will be merged</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 mb-3">
+    <div class="card h-100 stat-tile" style="border-left-color:var(--bs-warning)">
+      <div class="card-body py-3">
+        <div class="count text-warning">{{ result.review }}</div>
+        <div class="text-muted small">Need your review</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3 mb-3">
+    <div class="card h-100 stat-tile" style="border-left-color:var(--bs-secondary)">
+      <div class="card-body py-3">
+        <div class="count text-secondary">{{ result.rejected }}</div>
+        <div class="text-muted small">Rejected</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card"><div class="card-body">
+  <div class="d-flex flex-wrap gap-2 align-items-center">
+    <form method="post" action="{% url 'imports:commit' job.id %}">
+      {% csrf_token %}
+      <button class="btn btn-success">
+        <i data-feather="check" class="feather-sm"></i>
+        Import {{ result.created|add:result.merged|add:result.review }} rows
+      </button>
+    </form>
+    <form method="post" action="{% url 'imports:preview' job.id %}">
+      {% csrf_token %}
+      <button class="btn btn-outline-secondary">Re-check</button>
+    </form>
+    <a href="{% url 'imports:map_columns' job.id %}" class="btn btn-outline-secondary">
+      Change the column matching</a>
+    <form method="post" action="{% url 'imports:cancel' job.id %}">
+      {% csrf_token %}
+      <button class="btn btn-link text-danger">Cancel this import</button>
+    </form>
+    {% if result.rejected %}
+    <a href="{% url 'imports:download_rejected' job.id %}" class="btn btn-outline-dark">
+      <i data-feather="download" class="feather-sm"></i>
+      Download the {{ result.rejected }} rejected row{{ result.rejected|pluralize }}</a>
+    {% endif %}
+  </div>
+</div></div>
+
+{% if result.warned %}
+<div class="alert alert-warning">
+  <strong>{{ result.warned }} row{{ result.warned|pluralize }}</strong>
+  will be imported, but something on them did not pass validation — an invalid
+  email, an impossible phone number, a broken website address. The company is
+  kept; only the bad field is dropped. The details are in the list below and in
+  the download.
+</div>
+{% endif %}
+
+{% if result.warnings %}
+<div class="card"><div class="card-body">
+  <h6 class="card-title">Rows imported with a field dropped</h6>
+  <div class="table-responsive" style="max-height:320px;overflow:auto">
+    <table class="table table-sm table-sticky mb-0">
+      <thead><tr><th style="width:80px">Row</th><th>Company</th><th>What was dropped</th></tr></thead>
+      <tbody>
+      {% for entry in result.warnings %}
+      <tr>
+        <td>{{ entry.row }}</td>
+        <td class="wrap-any">{{ entry.company|dash }}</td>
+        <td class="text-warning small">{{ entry.reason }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div></div>
+{% endif %}
+
+{% if result.rejections %}
+<div class="card"><div class="card-body">
+  <h6 class="card-title">Rows that will not be imported</h6>
+  <div class="table-responsive" style="max-height:320px;overflow:auto">
+    <table class="table table-sm table-sticky mb-0">
+      <thead><tr><th style="width:80px">Row</th><th>Company</th><th>Reason</th></tr></thead>
+      <tbody>
+      {% for entry in result.rejections %}
+      <tr>
+        <td>{{ entry.row }}</td>
+        <td class="wrap-any">{{ entry.company|dash }}</td>
+        <td class="text-danger small">{{ entry.reason }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div></div>
+{% endif %}
+
+{% if result.samples %}
+<div class="card"><div class="card-body">
+  <h6 class="card-title">What will happen, row by row</h6>
+  <p class="text-muted small">First {{ result.samples|length }} rows shown.</p>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle responsive-stack">
+      <thead><tr><th>Row</th><th>Company</th><th>Action</th><th>Detail</th></tr></thead>
+      <tbody>
+      {% for sample in result.samples %}
+      <tr>
+        <td data-label="Row">{{ sample.row }}</td>
+        <td data-label="Company" class="wrap-any">{{ sample.company|dash }}</td>
+        <td data-label="Action">
+          <span class="badge bg-{% if sample.action == 'CREATED' %}success{% elif sample.action == 'MERGED' %}info{% elif sample.action == 'REVIEW' %}warning text-dark{% else %}secondary{% endif %}">
+            {% if sample.action == 'CREATED' %}New{% elif sample.action == 'MERGED' %}Duplicate
+            {% elif sample.action == 'REVIEW' %}Review{% else %}Rejected{% endif %}</span>
+        </td>
+        <td data-label="Detail" class="small text-muted">
+          {{ sample.reason }}
+          {% for warning in sample.warnings %}
+          <div class="text-warning">{{ warning }}</div>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div></div>
+{% endif %}
+{% endblock %}

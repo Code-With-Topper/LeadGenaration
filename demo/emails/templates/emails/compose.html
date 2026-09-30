@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% load crm_extras %}
+{% block title %}Send Email{% endblock %}
+{% block page_title %}Email {{ lead.company.company_name }}{% endblock %}
+{% block page_subtitle %}{{ quota_used }} of {{ quota_limit }} sent today · {{ quota_left }} left{% endblock %}
+
+{% block content %}
+{% if not can_send %}
+<div class="alert alert-warning">{{ reason }}</div>
+{% endif %}
+
+<div class="row">
+  <div class="col-lg-8">
+    <div class="card"><div class="card-body">
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label">To</label>
+          <input class="form-control" value="{{ lead.best_email|dash }}" disabled>
+          <div class="form-text">
+            Taken from the lead. To use a different address, edit the contact first.
+          </div>
+        </div>
+
+        {% if templates %}
+        <div class="mb-3">
+          <label class="form-label">Template</label>
+          <select id="template" name="template" class="form-select">
+            {% for template in templates %}
+            <option value="{{ template.id }}"
+              {% if selected_template.id == template.id %}selected{% endif %}>
+              {{ template.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+
+        <div class="mb-3">
+          <label class="form-label">Subject</label>
+          <input name="subject" id="subject" class="form-control"
+                 value="{{ subject }}" required>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Message</label>
+          <textarea name="message" id="message" rows="14" class="form-control"
+                    required>{{ body }}</textarea>
+          <div class="form-text">
+            A signature and a working unsubscribe link are added automatically.
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Attachment
+            <span class="text-muted small">(your company profile, rate list…)</span>
+          </label>
+          <input type="file" name="attachment" class="form-control">
+        </div>
+
+        <div class="form-check mb-3">
+          <input type="checkbox" name="mark_profile_sent" id="mark_profile_sent"
+                 class="form-check-input" checked>
+          <label class="form-check-label" for="mark_profile_sent">
+            This is the company profile — remind me to follow up in
+            {{ follow_up_delay|default:7 }} days
+          </label>
+        </div>
+
+        <button class="btn btn-primary" {% if not can_send %}disabled{% endif %}>
+          <i data-feather="send" class="feather-sm"></i> Send</button>
+        <a href="{% url 'leads:detail' lead.id %}" class="btn btn-link">Cancel</a>
+      </form>
+    </div></div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card"><div class="card-body small">
+      <h6 class="card-title">About this lead</h6>
+      <div class="mb-2"><span class="text-muted">Company</span><br>
+        {{ lead.company.company_name }}</div>
+      <div class="mb-2"><span class="text-muted">Industry</span><br>
+        {{ lead.company.industry|dash }}</div>
+      <div class="mb-2"><span class="text-muted">Location</span><br>
+        {{ lead.company.location|dash }}</div>
+      <div class="mb-2"><span class="text-muted">Contact</span><br>
+        {{ lead.contact.name|default:"—" }}</div>
+      <div class="mb-2"><span class="text-muted">Email status</span><br>
+        {{ lead.company.get_email_status_display }}</div>
+      <div><span class="text-muted">Current status</span><br>
+        <span class="badge bg-{{ lead.status|status_colour }}">
+          {{ lead.get_status_display }}</span></div>
+    </div></div>
+
+    <div class="card"><div class="card-body small">
+      <h6 class="card-title">Daily limit</h6>
+      <div class="progress mb-2" style="height:8px">
+        <div class="progress-bar {% if not quota_left %}bg-danger{% endif %}"
+             style="width:{% widthratio quota_used quota_limit 100 %}%"></div>
+      </div>
+      <p class="text-muted mb-0">
+        The limit of {{ quota_limit }} a day protects your domain's reputation.
+        Sending far more than this from a new domain is what gets mail marked
+        as spam.
+      </p>
+    </div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Swap in the chosen template's text, filled in for this lead.
+const select = document.getElementById('template');
+if (select) {
+  select.addEventListener('change', function () {
+    fetch('/emails/preview/{{ lead.id }}/' + this.value + '/')
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById('subject').value = data.subject;
+        document.getElementById('message').value = data.body;
+      })
+      .catch(() => {});
+  });
+}
+</script>
+{% endblock %}

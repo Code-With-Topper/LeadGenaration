@@ -1,92 +1,70 @@
 {% extends 'base.html' %}
-
-{% block title %}Follow-ups - Lead CRM{% endblock %}
+{% load crm_extras %}
+{% block title %}Follow-ups{% endblock %}
+{% block page_title %}Follow-ups{% endblock %}
+{% block page_subtitle %}
+Reminders are set automatically {{ delay_days }} days after you mark a profile as sent
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Follow-ups Dashboard</h3>
-            <div class="d-flex align-items-center mb-4">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb m-0 p-0">
-                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Follow-ups</li>
-                    </ol>
-                </nav>
-            </div>
-        </div>
-    </div>
-    
-    <div class="row">
-        <div class="col-12">
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="alert alert-success alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-            
-            <ul class="nav nav-tabs nav-bordered mb-3">
-                <li class="nav-item">
-                    <a href="#today" data-bs-toggle="tab" aria-expanded="true" class="nav-link active">
-                        <span class="d-none d-md-block">Today's Follow-ups <span class="badge bg-primary ms-1">{{ today_followups.count }}</span></span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="#overdue" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-                        <span class="d-none d-md-block">Overdue <span class="badge bg-danger ms-1">{{ overdue_followups.count }}</span></span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="#upcoming" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-                        <span class="d-none d-md-block">Upcoming <span class="badge bg-info ms-1">{{ upcoming_followups.count }}</span></span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="#completed" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-                        <span class="d-none d-md-block">Completed</span>
-                    </a>
-                </li>
-            </ul>
-
-            <div class="tab-content">
-                
-                <!-- Macro for rendering table -->
-                
-                
-                <!-- Today -->
-                <div class="tab-pane show active" id="today">
-                    <div class="card"><div class="card-body">
-                        {% include 'followups/_table.html' with followups=today_followups is_completed=False %}
-                    </div></div>
-                </div>
-                
-                <!-- Overdue -->
-                <div class="tab-pane" id="overdue">
-                    <div class="card"><div class="card-body">
-                        {% include 'followups/_table.html' with followups=overdue_followups is_completed=False %}
-                    </div></div>
-                </div>
-                
-                <!-- Upcoming -->
-                <div class="tab-pane" id="upcoming">
-                    <div class="card"><div class="card-body">
-                        {% include 'followups/_table.html' with followups=upcoming_followups is_completed=False %}
-                    </div></div>
-                </div>
-                
-                <!-- Completed -->
-                <div class="tab-pane" id="completed">
-                    <div class="card"><div class="card-body">
-                        {% include 'followups/_table.html' with followups=completed_followups is_completed=True %}
-                    </div></div>
-                </div>
-                
-            </div>
-        </div>
-    </div>
+<div class="row">
+  <div class="col-6 col-md-3 mb-3">
+    <div class="card stat-tile" style="border-left-color:var(--bs-danger)">
+      <div class="card-body py-3">
+        <div class="count text-danger">{{ overdue_count }}</div>
+        <div class="text-muted small">Overdue</div>
+      </div></div>
+  </div>
+  <div class="col-6 col-md-3 mb-3">
+    <div class="card stat-tile" style="border-left-color:var(--bs-warning)">
+      <div class="card-body py-3">
+        <div class="count text-warning">{{ today_count }}</div>
+        <div class="text-muted small">Due today</div>
+      </div></div>
+  </div>
+  <div class="col-6 col-md-3 mb-3">
+    <div class="card stat-tile" style="border-left-color:var(--bs-info)">
+      <div class="card-body py-3">
+        <div class="count text-info">{{ upcoming_count }}</div>
+        <div class="text-muted small">Next 14 days</div>
+      </div></div>
+  </div>
+  <div class="col-6 col-md-3 mb-3">
+    <div class="card stat-tile" style="border-left-color:var(--bs-secondary)">
+      <div class="card-body py-3">
+        <div class="count">{{ today|date:"d M" }}</div>
+        <div class="text-muted small">Today</div>
+      </div></div>
+  </div>
 </div>
+
+{% for group in groups %}{% endfor %}
+
+{% include 'followups/_leads.html' with leads=overdue_leads heading="Overdue — chase these first" colour="danger" empty="Nothing is overdue." %}
+{% include 'followups/_leads.html' with leads=today_leads heading="Due today" colour="warning" empty="Nothing due today." %}
+{% include 'followups/_leads.html' with leads=upcoming_leads heading="Coming up" colour="info" empty="Nothing scheduled in the next two weeks." %}
+
+<div class="card"><div class="card-body">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="card-title mb-0">Tasks you scheduled by hand</h6>
+    <a href="{% url 'followups:history' %}" class="btn btn-link btn-sm p-0">History</a>
+  </div>
+  {% if overdue_tasks or today_tasks or upcoming_tasks %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle responsive-stack">
+      <thead><tr>
+        <th>Date</th><th>Company</th><th>Type</th><th>Note</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for task in overdue_tasks %}{% include 'followups/_task_row.html' %}{% endfor %}
+      {% for task in today_tasks %}{% include 'followups/_task_row.html' %}{% endfor %}
+      {% for task in upcoming_tasks %}{% include 'followups/_task_row.html' %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted small mb-0">
+    No hand-scheduled tasks. Open any lead to add one.</p>
+  {% endif %}
+</div></div>
 {% endblock %}

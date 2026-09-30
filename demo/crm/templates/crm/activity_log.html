@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% load crm_extras %}
+{% block title %}Activity{% endblock %}
+{% block page_title %}Activity{% endblock %}
+{% block page_subtitle %}What has happened on your leads{% endblock %}
+
+{% block content %}
+<div class="card"><div class="card-body">
+  {% if activities %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle responsive-stack">
+      <thead><tr><th>When</th><th>Company</th><th>What</th><th>Detail</th><th>By</th></tr></thead>
+      <tbody>
+      {% for activity in activities %}
+      <tr>
+        <td data-label="When" class="small text-nowrap">{{ activity.created_at|date:"d M Y, H:i" }}</td>
+        <td data-label="Company" class="wrap-any">
+          <a href="{% url 'leads:detail' activity.lead_id %}">
+            {{ activity.lead.company.company_name }}</a></td>
+        <td data-label="What" class="small">{{ activity.action }}</td>
+        <td data-label="Detail" class="small text-muted wrap-any">{{ activity.description|dash }}</td>
+        <td data-label="By" class="small">{{ activity.performed_by.username|default:"system" }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include 'partials/pagination.html' %}
+  {% else %}
+    {% include 'partials/empty.html' with icon='activity' title='No activity yet' %}
+  {% endif %}
+</div></div>
+{% endblock %}

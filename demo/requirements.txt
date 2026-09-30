@@ -1,9 +1,26 @@
 Django>=5.0,<6.0
-selenium>=4.0
-celery>=5.0
-redis>=5.0
+python-dotenv>=1.0
+
+# Data handling for CSV/Excel import and export
 pandas>=2.0
 openpyxl>=3.0
-python-dotenv>=1.0
-psycopg2-binary>=2.9  # For PostgreSQL later
+
+# Tier 3 email validation (MX lookup). Free, no API key.
+dnspython>=2.4
+
+# Quotation PDFs
+reportlab>=4.0
+
+# Lead generation browser automation.
+# Playwright installs a browser it is built against ("playwright install
+# chromium"), so it cannot break on a Chrome update the way a Selenium +
+# ChromeDriver pair does. Free, and no service to subscribe to.
+playwright>=1.40
+
+# Production serving
 gunicorn>=21.0
+whitenoise>=6.0
+
+# Optional: only needed if PostgreSQL is used instead of SQLite
+# psycopg2-binary>=2.9
+# dj-database-url>=2.0

@@ -1,386 +1,319 @@
 {% extends 'base.html' %}
-
-{% block title %}Lead Details - {{ company.company_name }}{% endblock %}
+{% load crm_extras %}
+{% block title %}{{ company.company_name }}{% endblock %}
+{% block page_title %}{{ company.company_name }}{% endblock %}
+{% block page_subtitle %}{{ company.industry|dash }} · {{ company.location|dash }}{% endblock %}
+{% block page_actions %}
+{% if can_send_email %}
+<a href="{% url 'emails:compose' lead.id %}" class="btn btn-primary btn-sm">
+  <i data-feather="mail" class="feather-sm"></i> Send Email</a>
+{% else %}
+<button class="btn btn-secondary btn-sm" disabled title="{{ send_reason }}">
+  <i data-feather="mail" class="feather-sm"></i> Cannot email</button>
+{% endif %}
+<a href="{% url 'quotations:create_quotation' lead.id %}" class="btn btn-outline-primary btn-sm">
+  <i data-feather="file-text" class="feather-sm"></i> Quotation</a>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">{{ company.company_name }}</h3>
-            <div class="d-flex align-items-center mb-4">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb m-0 p-0">
-                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
-                        <li class="breadcrumb-item"><a href="{% url 'leads:index' %}">All Leads</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Detail</li>
-                    </ol>
-                </nav>
-            </div>
+<div class="row">
+  <div class="col-lg-8">
+
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+          <div>
+            <span class="badge bg-{{ lead.status|status_colour }} fs-6">
+              {{ lead.get_status_display }}</span>
+            <span class="band-pill band-{{ quality_band.0 }} ms-1">
+              Quality {{ quality_band.0 }} · {{ quality_score }}/100</span>
+            {% if lead.is_follow_up_overdue %}
+            <span class="badge bg-danger ms-1">Follow-up overdue</span>
+            {% endif %}
+          </div>
+          <form method="post" action="{% url 'crm:update_status' lead.id %}"
+                class="d-flex gap-2">
+            {% csrf_token %}
+            <select name="status" class="form-select form-select-sm" style="width:auto">
+              {% for value, label in status_choices %}
+              <option value="{{ value }}" {% if lead.status == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-sm btn-primary">Change</button>
+          </form>
         </div>
-    </div>
-    
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body">
-                    <ul class="nav nav-tabs nav-bordered mb-3">
-                        <li class="nav-item">
-                            <a href="#company" data-bs-toggle="tab" aria-expanded="true" class="nav-link active">
-                                <i class="mdi mdi-domain d-md-none d-block"></i>
-                                <span class="d-none d-md-block">Company Info</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#plants" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-                                <i class="mdi mdi-factory d-md-none d-block"></i>
-                                <span class="d-none d-md-block">Plant Info</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#contacts" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-                                <i class="mdi mdi-account-group d-md-none d-block"></i>
-                                <span class="d-none d-md-block">Contact Info</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#registration" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-                                <i class="mdi mdi-certificate d-md-none d-block"></i>
-                                <span class="d-none d-md-block">Registration</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#lead" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-                                <i class="mdi mdi-bullseye d-md-none d-block"></i>
-                                <span class="d-none d-md-block">Lead Info</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#interactions" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-                                <i class="mdi mdi-history d-md-none d-block"></i>
-                                <span class="d-none d-md-block">Activities & Emails</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="#sales" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
-                                <i class="mdi mdi-currency-usd d-md-none d-block"></i>
-                                <span class="d-none d-md-block">Follow-ups & Quotes</span>
-                            </a>
-                        </li>
-                    </ul>
-                    
-                    <!-- Compose Email Modal -->
-                    <div class="modal fade" id="composeEmailModal" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog">
-                            <form action="{% url 'emails:send_manual' lead.id %}" method="POST" enctype="multipart/form-data">
-                                {% csrf_token %}
-                                <div class="modal-content">
-                                    <div class="modal-header bg-primary">
-                                        <h5 class="modal-title text-white">Compose Email</h5>
-                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                    </div>
-                                    <div class="modal-body">
-                                        <div class="mb-3">
-                                            <label class="form-label">To</label>
-                                            <input type="email" class="form-control" name="to" value="{{ company.company_email }}" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Subject</label>
-                                            <input type="text" class="form-control" name="subject" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Message</label>
-                                            <textarea class="form-control" name="message" rows="5" required></textarea>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Attachment</label>
-                                            <input type="file" class="form-control" name="attachment">
-                                        </div>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                                        <button type="submit" class="btn btn-primary"><i class="fa fa-paper-plane me-1"></i> Send Email</button>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
 
-                    <div class="tab-content">
-                        <!-- Company Information -->
-                        <div class="tab-pane show active" id="company">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Company Name</h5>
-                                    <p class="text-muted">{{ company.company_name }}</p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Industry</h5>
-                                    <p class="text-muted">{{ company.industry }}</p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Primary Email</h5>
-                                    <p class="text-muted">{{ company.company_email|default:"NOT FOUND" }}</p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Primary Phone</h5>
-                                    <p class="text-muted">{{ company.company_phone|default:"NOT FOUND" }}</p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Website</h5>
-                                    <p class="text-muted">
-                                        {% if company.website %}
-                                            <a href="{{ company.website }}" target="_blank">{{ company.website }}</a>
-                                        {% else %}
-                                            NOT FOUND
-                                        {% endif %}
-                                    </p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">LinkedIn</h5>
-                                    <p class="text-muted">{{ company.linkedin_url|default:"NOT FOUND" }}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Plant Information -->
-                        <div class="tab-pane" id="plants">
-                            {% for plant in plants %}
-                            <div class="card border mb-3">
-                                <div class="card-body">
-                                    <h5 class="card-title">{{ plant.plant_name }}</h5>
-                                    <p class="card-text mb-1"><strong>City:</strong> {{ plant.city|default:"NOT FOUND" }}</p>
-                                    <p class="card-text mb-1"><strong>District:</strong> {{ plant.district|default:"NOT FOUND" }}</p>
-                                    <p class="card-text mb-1"><strong>State:</strong> {{ plant.state|default:"NOT FOUND" }}</p>
-                                    <p class="card-text mb-1"><strong>PIN:</strong> {{ plant.pin_code|default:"NOT FOUND" }}</p>
-                                    <p class="card-text mb-0"><strong>Address:</strong> {{ plant.plant_address|default:"NOT FOUND" }}</p>
-                                </div>
-                            </div>
-                            {% empty %}
-                            <p class="text-muted">No plants registered for this company.</p>
-                            {% endfor %}
-                        </div>
-
-                        <!-- Contact Information -->
-                        <div class="tab-pane" id="contacts">
-                            <div class="table-responsive">
-                                <table class="table table-bordered">
-                                    <thead class="bg-light">
-                                        <tr>
-                                            <th>Name</th>
-                                            <th>Email</th>
-                                            <th>Mobile</th>
-                                            <th>Designation</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for contact in contacts %}
-                                        <tr>
-                                            <td>{{ contact.name }}</td>
-                                            <td>{{ contact.email|default:"NOT FOUND" }}</td>
-                                            <td>{{ contact.mobile|default:"NOT FOUND" }}</td>
-                                            <td>{{ contact.designation|default:"NOT FOUND" }}</td>
-                                        </tr>
-                                        {% empty %}
-                                        <tr>
-                                            <td colspan="4" class="text-center text-muted">No contacts found.</td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- Registration -->
-                        <div class="tab-pane" id="registration">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">CIN (Corporate Identity Number)</h5>
-                                    <p class="text-muted">{{ company.cin|default:"NOT FOUND" }}</p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">GSTIN</h5>
-                                    <p class="text-muted">{{ company.gstin|default:"NOT FOUND" }}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Lead Information -->
-                        <div class="tab-pane" id="lead">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Lead Status</h5>
-                                    <p class="text-muted"><span class="badge bg-primary">{{ lead.status }}</span></p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Lead Source</h5>
-                                    <p class="text-muted">{{ lead.lead_source|default:"Manual Entry" }}</p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Source Query</h5>
-                                    <p class="text-muted">{{ lead.source_query|default:"N/A" }}</p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Source URL</h5>
-                                    <p class="text-muted">
-                                        {% if lead.source_url %}
-                                            <a href="{{ lead.source_url }}" target="_blank" style="word-break: break-all;">{{ lead.source_url }}</a>
-                                        {% else %}
-                                            N/A
-                                        {% endif %}
-                                    </p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Generation Job ID</h5>
-                                    <p class="text-muted">{% if lead.generation_job_id %}#{{ lead.generation_job_id }}{% else %}N/A{% endif %}</p>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <h5 class="font-weight-medium">Data Verified</h5>
-                                    <p class="text-muted">
-                                        {% if lead.data_verified %}
-                                            <span class="badge bg-success">Yes</span>
-                                        {% else %}
-                                            <span class="badge bg-danger">No</span>
-                                        {% endif %}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Activities & Emails -->
-                        <div class="tab-pane" id="interactions">
-                            <div class="d-flex justify-content-between align-items-center mt-2 mb-3">
-                                <h4 class="card-title m-0">Activities</h4>
-                            </div>
-                            <ul class="list-group mb-4">
-                                {% for act in activities %}
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong>{{ act.activity_type }}</strong>: {{ act.description }}
-                                    </div>
-                                    <span class="badge bg-secondary rounded-pill">{{ act.created_at|date:"M d, Y" }}</span>
-                                </li>
-                                {% empty %}
-                                <li class="list-group-item text-muted">No recent activities.</li>
-                                {% endfor %}
-                            </ul>
-
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h4 class="card-title m-0">Emails Sent</h4>
-                                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#composeEmailModal">
-                                    <i class="fa fa-envelope me-1"></i> Compose Email
-                                </button>
-                            </div>
-                            <ul class="list-group">
-                                {% for email in emails %}
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong>{{ email.subject }}</strong> (To: {{ email.recipient_email }})
-                                    </div>
-                                    <span class="badge bg-{% if email.status == 'SENT' %}success{% else %}warning{% endif %} rounded-pill">{{ email.status }}</span>
-                                </li>
-                                {% empty %}
-                                <li class="list-group-item text-muted">No emails sent yet.</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                        
-                        <!-- Follow-ups & Quotes -->
-                        <div class="tab-pane" id="sales">
-                            <div class="d-flex justify-content-between align-items-center mt-2 mb-3">
-                                <h4 class="card-title m-0">Scheduled Follow-ups</h4>
-                                <button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#scheduleFollowupModal">
-                                    <i class="fa fa-calendar me-1"></i> Schedule
-                                </button>
-                            </div>
-                            
-                            <!-- Schedule Follow-up Modal -->
-                            <div class="modal fade" id="scheduleFollowupModal" tabindex="-1" aria-hidden="true">
-                                <div class="modal-dialog">
-                                    <form action="{% url 'followups:create_followup' lead.id %}" method="POST">
-                                        {% csrf_token %}
-                                        <div class="modal-content">
-                                            <div class="modal-header bg-warning">
-                                                <h5 class="modal-title text-white">Schedule Follow-up</h5>
-                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                            </div>
-                                            <div class="modal-body">
-                                                <div class="row">
-                                                    <div class="col-md-6 mb-3">
-                                                        <label class="form-label">Date</label>
-                                                        <input type="date" class="form-control" name="date" required>
-                                                    </div>
-                                                    <div class="col-md-6 mb-3">
-                                                        <label class="form-label">Time</label>
-                                                        <input type="time" class="form-control" name="time">
-                                                    </div>
-                                                </div>
-                                                <div class="mb-3">
-                                                    <label class="form-label">Type</label>
-                                                    <select class="form-select" name="type" required>
-                                                        <option value="Call">Call</option>
-                                                        <option value="Email">Email</option>
-                                                        <option value="Meeting">Meeting</option>
-                                                    </select>
-                                                </div>
-                                                <div class="mb-3">
-                                                    <label class="form-label">Notes</label>
-                                                    <textarea class="form-control" name="notes" rows="3"></textarea>
-                                                </div>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                                                <button type="submit" class="btn btn-warning"><i class="fa fa-save me-1"></i> Save Follow-up</button>
-                                            </div>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                            
-                            <ul class="list-group mb-4">
-                                {% for fu in followups %}
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong>{{ fu.follow_up_type }}</strong> on {{ fu.date|date:"M d, Y" }} {{ fu.time|time:"H:i"|default:"" }}: {{ fu.notes|default:"No notes" }}
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <span class="badge bg-{% if fu.status == 'PENDING' %}warning{% else %}success{% endif %} rounded-pill">{{ fu.status }}</span>
-                                        {% if fu.status == 'PENDING' %}
-                                        <form action="{% url 'followups:complete_followup' fu.id %}" method="POST" style="display:inline;">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm btn-success py-0 px-1" title="Mark Completed"><i class="fa fa-check"></i></button>
-                                        </form>
-                                        {% endif %}
-                                    </div>
-                                </li>
-                                {% empty %}
-                                <li class="list-group-item text-muted">No follow-ups scheduled.</li>
-                                {% endfor %}
-                            </ul>
-                            
-                            <div class="d-flex justify-content-between align-items-center mt-4 mb-3">
-                                <h4 class="card-title m-0">Quotations</h4>
-                                <a href="{% url 'quotations:create_quotation' lead.id %}" class="btn btn-primary btn-sm">
-                                    <i class="fa fa-plus me-1"></i> Create
-                                </a>
-                            </div>
-                            <ul class="list-group mb-4">
-                                {% for q in lead.quotations.all %}
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <strong><a href="{% url 'quotations:view_quotation' q.id %}">#{{ q.quotation_number }}</a></strong> - Total: ${{ q.total_amount }}
-                                    </div>
-                                    <span class="badge bg-{% if q.status == 'ACCEPTED' %}success{% elif q.status == 'DRAFT' %}secondary{% else %}primary{% endif %} rounded-pill">{{ q.status }}</span>
-                                </li>
-                                {% empty %}
-                                <li class="list-group-item text-muted">No quotations generated.</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
+        {% if missing_fields %}
+        <div class="alert alert-light border small mb-3">
+          <strong>Missing:</strong> {{ missing_fields|join:", " }}.
+          Filling these in raises the quality score and makes the lead easier to work.
         </div>
+        {% endif %}
+
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <div class="text-muted small">Phone</div>
+            {% if company.company_phone %}
+            <a href="tel:{{ company.company_phone }}">{{ company.company_phone }}</a>
+            <span class="text-muted small">({{ company.get_phone_status_display }})</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Email</div>
+            <span class="wrap-any">{{ company.company_email|dash }}</span>
+            {% if company.company_email %}
+            <span class="badge bg-{% if company.email_status == 'MX_OK' %}success{% else %}secondary{% endif %}">
+              {{ company.get_email_status_display }}</span>
+            {% endif %}
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Website</div>
+            {% if company.website %}
+            <a href="{{ company.website }}" target="_blank" rel="noopener"
+               class="wrap-any">{{ company.normalized_domain }}</a>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Company type</div>{{ company.company_type|dash }}
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">CIN</div>{{ company.cin|dash }}
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">GSTIN</div>{{ company.gstin|dash }}
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Identity</div>{{ company.get_identity_status_display }}
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Source</div>
+            {{ lead.lead_source|dash }}
+            {% if lead.source_url %}
+            <a href="{{ lead.source_url }}" target="_blank" rel="noopener"
+               class="small">(page)</a>{% endif %}
+          </div>
+        </div>
+      </div>
     </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h6 class="card-title">Your notes</h6>
+        <form method="post" action="{% url 'leads:update_lead' lead.id %}">
+          {% csrf_token %}
+          <div class="mb-2">
+            <label class="form-label small">Requirement</label>
+            <textarea name="requirement" rows="2" class="form-control">{{ lead.requirement }}</textarea>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Quotation reference</label>
+            <input name="quotation" value="{{ lead.quotation }}" class="form-control">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small">Remarks</label>
+            <textarea name="remarks" rows="2" class="form-control">{{ lead.remarks }}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small">Next follow-up date</label>
+            <input type="date" name="follow_up_date" class="form-control"
+                   value="{{ lead.follow_up_date|date:'Y-m-d' }}">
+          </div>
+          <button class="btn btn-primary btn-sm">Save</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h6 class="card-title">Contact people</h6>
+        {% if contacts %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0 responsive-stack">
+            <thead><tr><th>Name</th><th>Designation</th><th>Mobile</th><th>Email</th></tr></thead>
+            <tbody>
+            {% for contact in contacts %}
+            <tr>
+              <td data-label="Name">{{ contact.name|dash }}</td>
+              <td data-label="Designation" class="small">{{ contact.designation|dash }}</td>
+              <td data-label="Mobile">
+                {% if contact.mobile %}<a href="tel:{{ contact.mobile }}">{{ contact.mobile }}</a>
+                {% else %}—{% endif %}
+              </td>
+              <td data-label="Email" class="small wrap-any">{{ contact.email|dash }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}<p class="text-muted small mb-0">No named contact yet.</p>{% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h6 class="card-title">Plants &amp; addresses</h6>
+        {% for plant in plants %}
+        <div class="border-bottom py-2">
+          <strong>{{ plant.plant_name|dash }}</strong>
+          <div class="small text-muted">{{ plant.full_address|dash }}</div>
+        </div>
+        {% empty %}<p class="text-muted small mb-0">No address recorded.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h6 class="card-title">Email history</h6>
+        {% for log in emails %}
+        <div class="border-bottom py-2 small">
+          <div class="d-flex justify-content-between">
+            <strong class="wrap-any">{{ log.subject }}</strong>
+            <span class="badge bg-{% if log.status == 'SENT' %}success{% elif log.status == 'FAILED' %}danger{% else %}secondary{% endif %}">
+              {{ log.get_status_display }}</span>
+          </div>
+          <div class="text-muted">
+            To {{ log.recipient }} · {{ log.sent_at|date:"d M Y, H:i" }}
+            {% if log.error_message %}<br><span class="text-danger">{{ log.error_message }}</span>{% endif %}
+          </div>
+        </div>
+        {% empty %}<p class="text-muted small mb-0">No email sent yet.</p>{% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h6 class="card-title">Activity</h6>
+        {% for activity in activities %}
+        <div class="small border-bottom py-1">
+          <strong>{{ activity.action }}</strong> — {{ activity.description }}
+          <span class="text-muted">{{ activity.created_at|date:"d M, H:i" }}</span>
+        </div>
+        {% empty %}<p class="text-muted small mb-0">Nothing recorded yet.</p>{% endfor %}
+        <form method="post" action="{% url 'crm:add_note' lead.id %}" class="mt-3">
+          {% csrf_token %}
+          <div class="input-group input-group-sm">
+            <input name="note" class="form-control" placeholder="Add a note…">
+            <button class="btn btn-outline-primary">Add</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-body">
+        <h6 class="card-title">Profile &amp; follow-up</h6>
+        {% if lead.profile_sent %}
+        <p class="small mb-2">
+          Profile sent on <strong>{{ lead.profile_sent_at|date:"d M Y" }}</strong>.
+          {% if lead.follow_up_date %}
+          Reminder set for <strong>{{ lead.follow_up_date|date:"d M Y" }}</strong>.
+          {% endif %}
+          {% if lead.follow_up_count %}
+          <br>Chased {{ lead.follow_up_count }} time{{ lead.follow_up_count|pluralize }}.
+          {% endif %}
+        </p>
+        <form method="post" action="{% url 'followups:snooze' lead.id %}" class="d-flex gap-2">
+          {% csrf_token %}
+          <select name="days" class="form-select form-select-sm">
+            <option value="7">in 7 days</option>
+            <option value="10">in 10 days</option>
+            <option value="14">in 14 days</option>
+            <option value="30">in 30 days</option>
+          </select>
+          <button class="btn btn-outline-secondary btn-sm text-nowrap">Remind me</button>
+        </form>
+        {% else %}
+        <p class="small text-muted">
+          Once you send your company profile, mark it here and the system will
+          remind you to follow up automatically.
+        </p>
+        <form method="post" action="{% url 'leads:mark_profile_sent' lead.id %}">
+          {% csrf_token %}
+          <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text">Remind me after</span>
+            <select name="delay_days" class="form-select">
+              <option value="7">7 days</option>
+              <option value="10">10 days</option>
+            </select>
+          </div>
+          <button class="btn btn-warning btn-sm w-100">Mark Profile Sent</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h6 class="card-title">Schedule a task</h6>
+        <form method="post" action="{% url 'followups:create' lead.id %}">
+          {% csrf_token %}
+          <div class="mb-2">
+            <input type="date" name="date" class="form-control form-control-sm" required>
+          </div>
+          <div class="mb-2">
+            <select name="type" class="form-select form-select-sm">
+              <option value="CALL">Phone call</option>
+              <option value="EMAIL">Email</option>
+              <option value="MEETING">Meeting</option>
+              <option value="VISIT">Site visit</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          <div class="mb-2">
+            <textarea name="notes" rows="2" class="form-control form-control-sm"
+                      placeholder="What needs doing?"></textarea>
+          </div>
+          <button class="btn btn-outline-primary btn-sm w-100">Add task</button>
+        </form>
+
+        {% for task in followups %}
+        <div class="small border-top pt-2 mt-2">
+          <strong>{{ task.date|date:"d M" }}</strong> {{ task.get_follow_up_type_display }}
+          <span class="badge bg-{% if task.status == 'COMPLETED' %}success{% elif task.is_overdue %}danger{% else %}secondary{% endif %}">
+            {{ task.get_status_display }}</span>
+          {% if task.notes %}<div class="text-muted">{{ task.notes }}</div>{% endif %}
+          {% if task.status == 'PENDING' %}
+          <form method="post" action="{% url 'followups:complete' task.id %}" class="mt-1">
+            {% csrf_token %}
+            <button class="btn btn-link btn-sm p-0">Mark done</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% if quotations %}
+    <div class="card">
+      <div class="card-body">
+        <h6 class="card-title">Quotations</h6>
+        {% for quotation in quotations %}
+        <div class="d-flex justify-content-between small border-bottom py-2">
+          <a href="{% url 'quotations:view_quotation' quotation.id %}">
+            {{ quotation.quotation_number }}</a>
+          <span>Rs {{ quotation.total_amount|floatformat:2 }}
+            <span class="badge bg-secondary">{{ quotation.get_status_display }}</span></span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="card-body small">
+        <h6 class="card-title">Where this came from</h6>
+        {% for entry in company.source_history %}
+        <div class="border-bottom py-1">
+          <strong>{{ entry.source }}</strong>
+          <div class="text-muted wrap-any">{{ entry.url|truncatechars:50 }}</div>
+          <div class="text-muted">{{ entry.seen }}</div>
+        </div>
+        {% empty %}<span class="text-muted">Not recorded.</span>{% endfor %}
+        <div class="text-muted mt-2">Last updated {{ lead.updated_at|date:"d M Y, H:i" }}</div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}

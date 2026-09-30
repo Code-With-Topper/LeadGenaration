@@ -1,9 +1,30 @@
-{% extends 'base.html' %}
-{% block title %}Terms & Conditions{% endblock %}
-{% block content %}
-<div class="container py-5">
-    <h1>Terms & Conditions</h1>
-    <p>By using this website, you agree to these terms...</p>
-    <p>Company: [COMPANY_NAME_PLACEHOLDER]</p>
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms · {{ company_name|default:"S.D Enterprise" }}</title>
+<link href="{% static 'css/style.min.css' %}" rel="stylesheet">
+</head>
+<body>
+<div class="container py-5" style="max-width:760px">
+  <h1 class="h4">Terms of Use</h1>
+  <p class="text-muted small">Last updated {{ "now"|date:"F Y" }}</p>
+
+  <h2 class="h6 mt-4">This system</h2>
+  <p>This is a private business system. Access is limited to authorised users
+    of {{ company_name|default:"S.D Enterprise" }}.</p>
+
+  <h2 class="h6 mt-4">Quotations</h2>
+  <p>Prices in a quotation are valid until the date stated on it, and are
+    subject to confirmation of stock and specification at the time of order.</p>
+
+  <h2 class="h6 mt-4">Correspondence</h2>
+  <p>We contact businesses about supplying goods and services. If you do not
+    wish to hear from us, use the unsubscribe link in any of our emails and we
+    will stop.</p>
+
+  <p class="mt-5"><a href="/">&larr; Home</a></p>
 </div>
-{% endblock %}
+</body>
+</html>

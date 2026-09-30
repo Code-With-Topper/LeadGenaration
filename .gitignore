@@ -13,3 +13,8 @@ venv.bak/
 .idea/
 .vscode/
 *.sqlite3
+
+# Exported archives of the project itself. Handy to pass around, but they must
+# not be committed back into the repository they contain.
+*.zip
+*.tar.gz

@@ -1,0 +1,27 @@
+# Background work: lead generation, large imports, follow-up reminders.
+# There is no Redis and no Celery — the database is the queue.
+#   cp deploy/leadcrm-worker.service /etc/systemd/system/
+#   systemctl enable --now leadcrm-worker
+#
+# If you would rather use cron, skip this file and see crontab.example.
+[Unit]
+Description=Lead Generation CRM (background worker)
+After=network.target
+
+[Service]
+Type=simple
+User=leadcrm
+Group=leadcrm
+WorkingDirectory=/srv/leadcrm/app/demo
+EnvironmentFile=/srv/leadcrm/app/demo/.env
+ExecStart=/srv/leadcrm/app/demo/.venv/bin/python manage.py run_worker --loop --interval 30
+Restart=always
+RestartSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/srv/leadcrm
+
+[Install]
+WantedBy=multi-user.target

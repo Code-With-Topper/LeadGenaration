@@ -1,399 +1,373 @@
 {% extends 'base.html' %}
-{% load static %}
-
-{% block title %}Lead Generation - Lead CRM{% endblock %}
+{% load crm_extras %}
+{% block title %}Find New Leads{% endblock %}
+{% block page_title %}Find New Leads{% endblock %}
+{% block page_subtitle %}
+Search for companies, read their published contact details, and add the good
+ones to your database
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Lead Generation</h3>
-            <div class="d-flex align-items-center">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb m-0 p-0">
-                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Lead Generation</li>
-                    </ol>
-                </nav>
-            </div>
+<div class="row">
+  <div class="col-xl-4">
+    <div class="card">
+      <div class="card-body">
+        <h6 class="card-title">Start a new search</h6>
+        {% if active_job %}
+        <div class="alert alert-info small">
+          Run #{{ active_job.id }} is {{ active_job.get_status_display|lower }}.
+          Stop it before starting another.
         </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'lead_generation:start' %}" id="start-form">
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label class="form-label">State</label>
+            <select name="state" id="state" class="form-select" required
+                    {% if active_job %}disabled{% endif %}>
+              {% for state in states %}
+              <option value="{{ state }}" {% if state == 'West Bengal' %}selected{% endif %}>
+                {{ state }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">District
+              <span class="text-muted small">(leave blank to search the whole state)</span>
+            </label>
+            <select name="district" id="district" class="form-select"
+                    {% if active_job %}disabled{% endif %}>
+              <option value="">All districts</option>
+              {% for district in districts %}
+              <option value="{{ district.name }}" data-state="{{ district.state }}"
+                      data-cities="{% for city in district.cities.all %}{{ city.name }}{% if not forloop.last %}|{% endif %}{% endfor %}">
+                {{ district.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">City
+              <span class="text-muted small">(optional)</span>
+            </label>
+            <select name="city" id="city" class="form-select"
+                    {% if active_job %}disabled{% endif %}>
+              <option value="">Whole district</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Industry</label>
+            <select name="industry" id="industry" class="form-select" required
+                    {% if active_job %}disabled{% endif %}>
+              {% for industry in industries %}
+              <option value="{{ industry.name }}"
+                      data-keywords="{% for keyword in industry.keywords.all %}{{ keyword.keyword }}{% if not forloop.last %}|{% endif %}{% endfor %}">
+                {{ industry.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Search phrases
+              <span class="text-muted small">(pick one or more)</span>
+            </label>
+            <select name="keywords" id="keywords" class="form-select" multiple
+                    size="7" {% if active_job %}disabled{% endif %}></select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Extra phrases
+              <span class="text-muted small">(comma separated, optional)</span>
+            </label>
+            <input name="extra_keywords" class="form-control"
+                   placeholder="pig iron supplier, ingot maker"
+                   {% if active_job %}disabled{% endif %}>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Stop after</label>
+            <select name="max_websites" class="form-select"
+                    {% if active_job %}disabled{% endif %}>
+              <option value="25">25 websites (quick test)</option>
+              <option value="50" selected>50 websites</option>
+              <option value="100">100 websites</option>
+              <option value="250">250 websites (long run)</option>
+            </select>
+          </div>
+
+          <button class="btn btn-success w-100" {% if active_job %}disabled{% endif %}>
+            <i data-feather="play" class="feather-sm"></i> Start Searching
+          </button>
+        </form>
+
+        <p class="text-muted small mt-3 mb-0">
+          Only contact details a company publishes on its own website are
+          collected, and <code>robots.txt</code> is respected. Duplicates are
+          merged automatically; anything uncertain goes to
+          <a href="{% url 'leads:review_list' %}">Duplicate Review</a>.
+        </p>
+      </div>
     </div>
-    
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body">
-                    <h4 class="card-title mb-4">New Generation Job</h4>
-                    
-                    {% if messages %}
-                        {% for message in messages %}
-                            <div class="alert alert-{{ message.tags }} alert-dismissible bg-{{ message.tags }} text-white border-0 fade show" role="alert">
-                                {{ message }}
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                    
-                    <form action="{% url 'lead_generation:index' %}" method="POST" onsubmit="if(this.dataset.submitted) return false; this.dataset.submitted=true;">
-                        {% csrf_token %}
-                        
-                        <h5 class="card-subtitle text-muted mb-3">1. Location & Industry Selection</h5>
-                        <div class="row">
-                            <div class="col-md-3 mb-3">
-                                <label for="state" class="form-label">State</label>
-                                <select class="form-select" id="state" name="state" required>
-                                    <option value="">[ Select State ▼ ]</option>
-                                    <option value="West Bengal">West Bengal</option>
-                                    <option value="Maharashtra">Maharashtra</option>
-                                    <option value="Karnataka">Karnataka</option>
-                                    <option value="Delhi">Delhi</option>
-                                    <option value="Gujarat">Gujarat</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3 mb-3">
-                                <label for="district" class="form-label">District</label>
-                                <select class="form-select" id="district" name="district" required>
-                                    <option value="">[ Select District ▼ ]</option>
-                                    <option value="Paschim Bardhaman">Paschim Bardhaman</option>
-                                    <option value="Kolkata">Kolkata</option>
-                                    <option value="Mumbai">Mumbai</option>
-                                    <option value="Pune">Pune</option>
-                                    <option value="Bangalore Urban">Bangalore Urban</option>
-                                    <option value="Ahmedabad">Ahmedabad</option>
-                                    <option value="New Delhi">New Delhi</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3 mb-3">
-                                <label for="city" class="form-label">City</label>
-                                <select class="form-select" id="city" name="city" required>
-                                    <option value="">[ Select City ▼ ]</option>
-                                    <option value="Durgapur">Durgapur</option>
-                                    <option value="Asansol">Asansol</option>
-                                    <option value="Kolkata">Kolkata</option>
-                                    <option value="Mumbai">Mumbai</option>
-                                    <option value="Pune">Pune</option>
-                                    <option value="Bangalore">Bangalore</option>
-                                    <option value="Ahmedabad">Ahmedabad</option>
-                                    <option value="New Delhi">New Delhi</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3 mb-3">
-                                <label for="industry" class="form-label">Industry</label>
-                                <select class="form-select" id="industry" name="industry" required>
-                                    <option value="">[ Select Industry ▼ ]</option>
-                                    <option value="Iron & Steel">Iron & Steel</option>
-                                    <option value="IT Services">IT Services</option>
-                                    <option value="Manufacturing">Manufacturing</option>
-                                    <option value="Healthcare">Healthcare</option>
-                                    <option value="Finance">Finance</option>
-                                </select>
-                            </div>
-                        </div>
+  </div>
 
-                        <div class="row mt-3">
-                            <div class="col-md-12 mb-3">
-                                <label for="keywords" class="form-label">Keywords</label>
-                                <select class="form-select" id="keywords" name="keywords" multiple style="height: 100px;" required>
-                                    <option value="Steel Manufacturer" selected>[ Steel Manufacturer ]</option>
-                                    <option value="Steel Plant" selected>[ Steel Plant ]</option>
-                                    <option value="Rolling Mill" selected>[ Rolling Mill ]</option>
-                                </select>
-                                <small class="form-text text-muted">Hold CTRL to select multiple keywords.</small>
-                            </div>
-                        </div>
-
-                        <hr class="my-4">
-                        
-                        <h5 class="card-subtitle text-muted mb-3">2. Run Mode</h5>
-                        <div class="row mb-4">
-                            <div class="col-md-12">
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="radio" name="run_mode" id="mode1" value="until_stopped" checked>
-                                    <label class="form-check-label" for="mode1">
-                                        Run until stopped
-                                    </label>
-                                </div>
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="radio" name="run_mode" id="mode2" value="duration">
-                                    <label class="form-check-label" for="mode2">
-                                        Run for selected duration
-                                    </label>
-                                </div>
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="radio" name="run_mode" id="mode3" value="queue_completed">
-                                    <label class="form-check-label" for="mode3">
-                                        Run until selected search/location queue is completed
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <hr class="my-4">
-
-                        <h5 class="card-subtitle text-muted mb-3">3. Browser Options</h5>
-                        <div class="row mb-4">
-                            <div class="col-md-12">
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="is_headless" name="is_headless" checked>
-                                    <label class="form-check-label" for="is_headless">
-                                        <strong>Run in Background (Headless Mode)</strong>
-                                        <br><small class="text-muted">Runs the scraper silently in the background without opening a visible Chrome window. Check this to bypass popups and run cleanly on servers.</small>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <hr class="my-4">
-
-
-                        <h5 class="card-subtitle text-muted mb-3">4. Job Controls</h5>
-                        <div class="d-flex gap-2">
-                                <button type="submit" name="action" value="start" class="btn btn-success waves-effect waves-light"><i class="fa fa-play me-1"></i> START GENERATION</button>
-                                <button type="submit" name="action" value="pause" class="btn btn-warning waves-effect waves-light text-white" formnovalidate><i class="fa fa-pause me-1"></i> PAUSE</button>
-                                <button type="submit" name="action" value="resume" class="btn btn-info waves-effect waves-light text-white" formnovalidate><i class="fa fa-play-circle me-1"></i> RESUME</button>
-                                <button type="submit" name="action" value="stop" class="btn btn-danger waves-effect waves-light" formnovalidate><i class="fa fa-stop me-1"></i> STOP</button>
-                        </div>
-                        
-                        {% if not active_job %}
-                            <div class="mt-3 text-muted">
-                                <i class="fas fa-info-circle text-primary"></i> Ready to generate leads. Configure your search and click Start Generation to begin.
-                            </div>
-                        {% endif %}
-
-                    </form>
-                </div>
-            </div>
+  <div class="col-xl-8">
+    <div class="card" id="live-card" {% if not active_job %}style="display:none"{% endif %}>
+      <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+          <h6 class="card-title mb-0">
+            Run <span id="job-id">{{ active_job.id|default:"" }}</span>
+            <span class="badge bg-primary" id="job-status">
+              {{ active_job.get_status_display|default:"" }}</span>
+          </h6>
+          <div class="d-flex gap-1" id="job-controls"></div>
         </div>
-    </div>
+        <div class="text-muted small mb-2" id="job-scope">{{ active_job.scope|default:"" }}</div>
 
-    
-    {% if previous_jobs %}
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card border-secondary mb-3">
-                <div class="card-header bg-light">
-                    <h5 class="mb-0 text-dark"><i class="fas fa-history me-2"></i> Previous Generation Jobs</h5>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Job ID</th>
-                                    <th>Location</th>
-                                    <th>Industry</th>
-                                    <th>Status</th>
-                                    <th>Valid Leads</th>
-                                    <th>Date</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for job in previous_jobs %}
-                                <tr>
-                                    <td>#{{ job.id }}</td>
-                                    <td>{{ job.city }}, {{ job.state }}</td>
-                                    <td>{{ job.industry }}</td>
-                                    <td>
-                                        {% if job.status == 'COMPLETED' %}
-                                            <span class="badge bg-success">COMPLETED</span>
-                                        {% elif job.status == 'STOPPED' %}
-                                            <span class="badge bg-danger">STOPPED</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary">{{ job.status }}</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ job.valid_leads }}</td>
-                                    <td>{{ job.created_at|date:"d M Y" }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+        <div class="progress mb-3" style="height:10px">
+          <div class="progress-bar progress-bar-striped progress-bar-animated"
+               id="job-progress" style="width:0%"></div>
         </div>
-    </div>
-    {% endif %}
 
-    <!-- LIVE PANEL -->
-    <div class="row mt-4" id="live-panel-container">
-        <div class="col-12">
-            <div class="card border-primary mb-3">
-                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0 text-white"><i class="fas fa-broadcast-tower me-2"></i> LIVE GENERATED LEADS</h5>
-                    <span id="live-status-badge" class="badge bg-light text-primary">● RUNNING</span>
-                </div>
-                <div class="card-body">
-                    
-                    <!-- Counters -->
-                    <div class="row text-center mb-4 border-bottom pb-3">
-                        <div class="col-md-2 col-4 mb-2">
-                            <h6 class="text-muted mb-1">Websites</h6>
-                            <h3 class="mb-0 text-info" id="count-websites">0</h3>
-                        </div>
-                        <div class="col-md-2 col-4 mb-2">
-                            <h6 class="text-muted mb-1">Companies</h6>
-                            <h3 class="mb-0 text-primary" id="count-companies">0</h3>
-                        </div>
-                        <div class="col-md-2 col-4 mb-2">
-                            <h6 class="text-muted mb-1">Valid</h6>
-                            <h3 class="mb-0 text-success" id="count-valid">0</h3>
-                        </div>
-                        <div class="col-md-2 col-4 mb-2">
-                            <h6 class="text-muted mb-1">Verify</h6>
-                            <h3 class="mb-0 text-warning" id="count-verify">0</h3>
-                        </div>
-                        <div class="col-md-2 col-4 mb-2">
-                            <h6 class="text-muted mb-1">Duplicates</h6>
-                            <h3 class="mb-0 text-secondary" id="count-duplicates">0</h3>
-                        </div>
-                        <div class="col-md-2 col-4 mb-2">
-                            <h6 class="text-muted mb-1">Errors/Invalid</h6>
-                            <h3 class="mb-0 text-danger" id="count-errors">0</h3>
-                        </div>
-                    </div>
-                    
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h6 class="text-muted mb-0">Latest Generated Leads</h6>
-                        <small class="text-muted" id="live-current-query"></small>
-                    </div>
-                    
-                    <div id="live-error-message" class="alert alert-danger d-none mb-3"></div>
-
-                    <!-- Leads Container -->
-                    <div id="live-leads-list" style="max-height: 600px; overflow-y: auto; padding-right: 10px;">
-                        <!-- Lead cards will be injected here -->
-                    </div>
-
-                </div>
-            </div>
+        <div class="row text-center g-2 mb-3">
+          {% for key, label in counters %}{% endfor %}
+          <div class="col-4 col-md-2"><div class="border rounded py-2">
+            <div class="fw-bold" id="c-websites">0</div>
+            <div class="text-muted" style="font-size:.7rem">Sites checked</div></div></div>
+          <div class="col-4 col-md-2"><div class="border rounded py-2">
+            <div class="fw-bold text-success" id="c-new">0</div>
+            <div class="text-muted" style="font-size:.7rem">New leads</div></div></div>
+          <div class="col-4 col-md-2"><div class="border rounded py-2">
+            <div class="fw-bold text-info" id="c-dup">0</div>
+            <div class="text-muted" style="font-size:.7rem">Duplicates</div></div></div>
+          <div class="col-4 col-md-2"><div class="border rounded py-2">
+            <div class="fw-bold text-warning" id="c-review">0</div>
+            <div class="text-muted" style="font-size:.7rem">To review</div></div></div>
+          <div class="col-4 col-md-2"><div class="border rounded py-2">
+            <div class="fw-bold text-secondary" id="c-rejected">0</div>
+            <div class="text-muted" style="font-size:.7rem">Rejected</div></div></div>
+          <div class="col-4 col-md-2"><div class="border rounded py-2">
+            <div class="fw-bold" id="c-limit">0</div>
+            <div class="text-muted" style="font-size:.7rem">Limit</div></div></div>
         </div>
-    </div>
-    
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        let isPolling = false;
-        let pollInterval;
-        let knownLeadIds = new Set();
-        let currentJobId = null;
-        
-        function fetchLiveData() {
-            let fetchUrl = "{% url 'lead_generation:live_data' %}";
-            if (currentJobId) {
-                fetchUrl += "?job_id=" + currentJobId;
-            }
-            
-            fetch(fetchUrl)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'ok') {
-                        currentJobId = data.job.id;
-                        document.getElementById('live-panel-container').style.display = 'flex';
-                        
-                        // Update Counters
-                        document.getElementById('count-websites').textContent = data.job.websites_found;
-                        document.getElementById('count-companies').textContent = data.job.companies_found;
-                        document.getElementById('count-valid').textContent = data.job.valid_leads;
-                        document.getElementById('count-verify').textContent = data.job.needs_review;
-                        document.getElementById('count-duplicates').textContent = data.job.duplicate_leads;
-                        document.getElementById('count-errors').textContent = data.job.invalid_leads;
-                        
-                        document.getElementById('live-current-query').textContent = data.job.current_query ? "Searching: " + data.job.current_query : "";
-                        
-                        const statusBadge = document.getElementById('live-status-badge');
-                        statusBadge.textContent = "● " + data.job.status;
-                        
-                        const errorPanel = document.getElementById('live-error-message');
-                        if (data.job.error_message) {
-                            errorPanel.textContent = "Error: " + data.job.error_message;
-                            errorPanel.classList.remove('d-none');
-                        } else {
-                            errorPanel.classList.add('d-none');
-                        }
-                        
-                        if (data.job.status === 'COMPLETED' || data.job.status === 'STOPPED' || data.job.status === 'FAILED') {
-                            if(isPolling) {
-                                clearInterval(pollInterval);
-                                isPolling = false;
-                            }
-                        } else {
-                            if(!isPolling) {
-                                pollInterval = setInterval(fetchLiveData, 3000);
-                                isPolling = true;
-                            }
-                        }
-                        
-                        // Update Leads list
-                        const listContainer = document.getElementById('live-leads-list');
-                        let needsReflow = false;
-                        
-                        data.leads.reverse().forEach(lead => {
-                            if (!knownLeadIds.has(lead.id)) {
-                                knownLeadIds.add(lead.id);
-                                needsReflow = true;
-                                
-                                let statusClass = 'bg-secondary';
-                                let statusText = 'PROCESSING';
-                                if(lead.status === 'NEW' && lead.data_verified) {
-                                    statusClass = 'bg-success';
-                                    statusText = '✓ VERIFIED';
-                                } else if (lead.status === 'NEW' && !lead.data_verified) {
-                                    statusClass = 'bg-warning text-dark';
-                                    statusText = '⚠ NEEDS VERIFY';
-                                } else if (lead.status === 'INVALID') {
-                                    statusClass = 'bg-danger';
-                                    statusText = '✗ INVALID';
-                                }
-                                
-                                const leadHtml = `
-                                    <div class="card border mb-2 shadow-sm">
-                                        <div class="card-body py-3">
-                                            <div class="d-flex justify-content-between align-items-start">
-                                                <div>
-                                                    <h5 class="mb-1 text-dark">${lead.company_name} <span class="badge ${statusClass} ms-2" style="font-size: 0.75rem;">${statusText}</span></h5>
-                                                    <p class="text-muted mb-2 text-sm">${lead.industry} | <i class="fas fa-map-marker-alt text-danger"></i> ${lead.city}, ${lead.state}</p>
-                                                    <div class="d-flex gap-3 text-sm">
-                                                        <span class="text-dark"><i class="fas fa-phone text-muted"></i> ${lead.phone}</span>
-                                                        <span class="text-dark"><i class="fas fa-envelope text-muted"></i> ${lead.email}</span>
-                                                    </div>
-                                                </div>
-                                                <div class="d-flex flex-column gap-2 text-end">
-                                                    <a href="/leads/companies/?search=${encodeURIComponent(lead.company_name)}" class="btn btn-sm btn-outline-primary" target="_blank">View Lead</a>
-                                                    ${lead.website ? `<a href="${lead.website}" class="btn btn-sm btn-outline-secondary" target="_blank">Website</a>` : ''}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                `;
-                                listContainer.insertAdjacentHTML('afterbegin', leadHtml);
-                            }
-                        });
-                        
-                    } else if (data.status === 'no_job') {
-                        document.getElementById('live-panel-container').style.display = 'flex';
-                        document.getElementById('live-status-badge').textContent = 'READY TO START';
-                        document.getElementById('live-status-badge').className = 'badge bg-light text-dark';
-                        document.getElementById('live-current-query').textContent = 'No generation is currently running. Configure your search and click Start Generation to begin.';
-                        
-                        document.getElementById('count-websites').textContent = '0';
-                        document.getElementById('count-companies').textContent = '0';
-                        document.getElementById('count-valid').textContent = '0';
-                        document.getElementById('count-verify').textContent = '0';
-                        document.getElementById('count-duplicates').textContent = '0';
-                        document.getElementById('count-errors').textContent = '0';
-                        
-                        if(isPolling) {
-                            clearInterval(pollInterval);
-                            isPolling = false;
-                        }
-                    }
-                })
-                .catch(err => console.error("Live panel fetch error:", err));
-        }
-        
-        // Initial fetch and poll setup
-        fetchLiveData();
-    });
-    </script>
 
+        <div class="small text-muted mb-1">Now searching: <span id="job-query">—</span></div>
+        <div class="small text-muted mb-3 wrap-any">
+          Reading: <span id="job-site">—</span></div>
+
+        <div class="alert alert-danger small" id="job-error" style="display:none"></div>
+
+        <h6 class="small text-uppercase text-muted">Activity</h6>
+        <ul class="list-unstyled small mb-3" id="job-log"></ul>
+
+        <h6 class="small text-uppercase text-muted">Leads found in this run</h6>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle responsive-stack">
+            <thead><tr>
+              <th>Company</th><th>Location</th><th>Phone</th><th>Email</th><th>Quality</th>
+            </tr></thead>
+            <tbody id="job-leads">
+              <tr><td colspan="5" class="text-muted text-center py-3">
+                Nothing yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h6 class="card-title">Earlier runs</h6>
+        {% if recent_jobs %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle responsive-stack">
+            <thead><tr>
+              <th>#</th><th>What</th><th>Where</th><th>Result</th><th>Status</th><th>When</th>
+            </tr></thead>
+            <tbody>
+            {% for job in recent_jobs %}
+            <tr>
+              <td data-label="#">{{ job.id }}</td>
+              <td data-label="What" class="small">{{ job.industry }}</td>
+              <td data-label="Where" class="small">{{ job.scope }}</td>
+              <td data-label="Result" class="small">
+                {{ job.leads_found }} new · {{ job.duplicate_leads }} dup ·
+                {{ job.rejected_leads }} rejected
+              </td>
+              <td data-label="Status">
+                <span class="badge bg-{% if job.status == 'COMPLETED' %}success{% elif job.status == 'FAILED' %}danger{% else %}secondary{% endif %}">
+                  {{ job.get_status_display }}</span>
+              </td>
+              <td data-label="When" class="small text-muted">{{ job.created_at|date:"d M, H:i" }}</td>
+            </tr>
+            {% if job.error_message %}
+            <tr><td colspan="6" class="small text-danger">
+              {{ job.error_message|truncatechars:200 }}</td></tr>
+            {% endif %}
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+          {% include 'partials/empty.html' with icon='crosshair' title='No runs yet' hint='Fill in the form and press Start Searching.' %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const districtSelect = document.getElementById('district');
+  const stateSelect    = document.getElementById('state');
+  const citySelect     = document.getElementById('city');
+  const industrySelect = document.getElementById('industry');
+  const keywordSelect  = document.getElementById('keywords');
+
+  // Only show districts belonging to the chosen state.
+  function filterDistricts() {
+    const state = stateSelect.value;
+    Array.from(districtSelect.options).forEach(option => {
+      if (!option.value) return;
+      option.hidden = option.dataset.state !== state;
+    });
+    if (districtSelect.selectedOptions[0] && districtSelect.selectedOptions[0].hidden) {
+      districtSelect.value = '';
+    }
+    fillCities();
+  }
+
+  function fillCities() {
+    const option = districtSelect.selectedOptions[0];
+    const cities = (option && option.dataset.cities) ? option.dataset.cities.split('|') : [];
+    citySelect.innerHTML = '<option value="">Whole district</option>';
+    cities.filter(Boolean).forEach(name => {
+      const element = document.createElement('option');
+      element.value = element.textContent = name;
+      citySelect.appendChild(element);
+    });
+  }
+
+  // Load the industry's search phrases, all selected by default.
+  function fillKeywords() {
+    const option = industrySelect.selectedOptions[0];
+    const phrases = (option && option.dataset.keywords)
+      ? option.dataset.keywords.split('|') : [];
+    keywordSelect.innerHTML = '';
+    phrases.filter(Boolean).forEach(phrase => {
+      const element = document.createElement('option');
+      element.value = element.textContent = phrase;
+      element.selected = true;
+      keywordSelect.appendChild(element);
+    });
+  }
+
+  if (stateSelect) {
+    stateSelect.addEventListener('change', filterDistricts);
+    districtSelect.addEventListener('change', fillCities);
+    industrySelect.addEventListener('change', fillKeywords);
+    filterDistricts();
+    fillKeywords();
+  }
+
+  const form = document.getElementById('start-form');
+  if (form) {
+    form.addEventListener('submit', () => {
+      // Guard against a double submit creating two runs.
+      const button = form.querySelector('button[type=submit], button:not([type])');
+      if (button) { button.disabled = true; button.textContent = 'Starting…'; }
+    });
+  }
+
+  // ---- live progress -----------------------------------------------------
+  const card = document.getElementById('live-card');
+  const csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+  let timer = null;
+
+  function controlButton(label, action, id, style) {
+    return '<form method="post" action="/lead-generation/' + id + '/' + action + '/">'
+      + '<input type="hidden" name="csrfmiddlewaretoken" value="' + (csrf ? csrf.value : '') + '">'
+      + '<button class="btn btn-sm ' + style + '">' + label + '</button></form>';
+  }
+
+  function render(data) {
+    const job = data.job;
+    card.style.display = '';
+    document.getElementById('job-id').textContent = '#' + job.id;
+    document.getElementById('job-status').textContent = job.status_display;
+    document.getElementById('job-scope').textContent = job.scope;
+    document.getElementById('job-progress').style.width = job.progress + '%';
+    document.getElementById('c-websites').textContent = job.websites_found;
+    document.getElementById('c-new').textContent = job.leads_found;
+    document.getElementById('c-dup').textContent = job.duplicate_leads;
+    document.getElementById('c-review').textContent = job.needs_review;
+    document.getElementById('c-rejected').textContent = job.rejected_leads;
+    document.getElementById('c-limit').textContent = job.max_websites;
+    document.getElementById('job-query').textContent = job.current_query || '—';
+    document.getElementById('job-site').textContent = job.current_website || '—';
+
+    const error = document.getElementById('job-error');
+    if (job.error_message) {
+      error.style.display = ''; error.textContent = job.error_message;
+    } else { error.style.display = 'none'; }
+
+    let controls = '';
+    if (job.status === 'RUNNING') {
+      controls = controlButton('Pause', 'pause', job.id, 'btn-warning')
+               + controlButton('Stop', 'stop', job.id, 'btn-danger');
+    } else if (job.status === 'PAUSED') {
+      controls = controlButton('Resume', 'resume', job.id, 'btn-info')
+               + controlButton('Stop', 'stop', job.id, 'btn-danger');
+    }
+    const box = document.getElementById('job-controls');
+    box.innerHTML = controls;
+    box.className = 'd-flex gap-1';
+
+    document.getElementById('job-log').innerHTML =
+      (job.log || []).map(line => '<li class="text-muted">' + escapeHtml(line) + '</li>').join('')
+      || '<li class="text-muted">Starting…</li>';
+
+    const body = document.getElementById('job-leads');
+    if (!data.leads.length) {
+      body.innerHTML = '<tr><td colspan="5" class="text-muted text-center py-3">Nothing yet.</td></tr>';
+    } else {
+      body.innerHTML = data.leads.map(lead =>
+        '<tr>'
+        + '<td data-label="Company"><a href="/leads/' + lead.id + '/">'
+          + escapeHtml(lead.company_name) + '</a></td>'
+        + '<td data-label="Location" class="small">'
+          + escapeHtml(lead.city) + ', ' + escapeHtml(lead.district) + '</td>'
+        + '<td data-label="Phone" class="small">' + escapeHtml(lead.phone) + '</td>'
+        + '<td data-label="Email" class="small wrap-any">' + escapeHtml(lead.email) + '</td>'
+        + '<td data-label="Quality"><span class="band-pill band-' + lead.band + '">'
+          + lead.band + ' · ' + lead.score + '</span></td>'
+        + '</tr>').join('');
+    }
+
+    if (!job.is_active && timer) { clearInterval(timer); timer = null; }
+  }
+
+  function escapeHtml(value) {
+    return String(value === null || value === undefined ? '' : value)
+      .replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  }
+
+  function poll() {
+    fetch('{% url "lead_generation:live_data" %}')
+      .then(response => response.json())
+      .then(data => { if (data.status === 'ok') render(data); })
+      .catch(() => {});
+  }
+
+  {% if active_job %}
+  poll();
+  timer = setInterval(poll, 3000);
+  {% endif %}
+})();
+</script>
 {% endblock %}

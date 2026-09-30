@@ -1,243 +1,149 @@
 {% extends 'base.html' %}
-{% load static %}
-
-{% block title %}Dashboard - Lead CRM{% endblock %}
+{% load crm_extras %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Where every lead stands today{% endblock %}
+{% block page_actions %}
+<a href="{% url 'lead_generation:index' %}" class="btn btn-primary btn-sm">
+  <i data-feather="crosshair" class="feather-sm"></i> Find New Leads</a>
+{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Welcome to Lead CRM</h3>
-            <div class="d-flex align-items-center">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb m-0 p-0">
-                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
-                    </ol>
-                </nav>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Top KPI Cards -->
-    <div class="row mt-4">
-        <div class="col-sm-6 col-lg-3">
-            <div class="card bg-primary text-white">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div>
-                            <div class="d-inline-flex align-items-center">
-                                <h2 class="text-white mb-1 font-weight-medium">{{ total_leads }}</h2>
-                            </div>
-                            <h6 class="text-white-50 font-weight-normal mb-0 w-100 text-truncate">Total Leads</h6>
-                        </div>
-                        <div class="ms-auto mt-md-3 mt-lg-0">
-                            <span class="opacity-7 text-white"><i data-feather="users" class="feather-xl"></i></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card bg-success text-white">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div>
-                            <div class="d-inline-flex align-items-center">
-                                <h2 class="text-white mb-1 font-weight-medium">{{ valid_leads }}</h2>
-                            </div>
-                            <h6 class="text-white-50 font-weight-normal mb-0 w-100 text-truncate">Valid Leads</h6>
-                        </div>
-                        <div class="ms-auto mt-md-3 mt-lg-0">
-                            <span class="opacity-7 text-white"><i data-feather="check-circle" class="feather-xl"></i></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card bg-warning text-white">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div>
-                            <div class="d-inline-flex align-items-center">
-                                <h2 class="text-white mb-1 font-weight-medium">{{ incomplete_leads }}</h2>
-                            </div>
-                            <h6 class="text-white-50 font-weight-normal mb-0 w-100 text-truncate">Incomplete Leads</h6>
-                        </div>
-                        <div class="ms-auto mt-md-3 mt-lg-0">
-                            <span class="opacity-7 text-white"><i data-feather="alert-circle" class="feather-xl"></i></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card bg-info text-white">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div>
-                            <div class="d-inline-flex align-items-center">
-                                <h2 class="text-white mb-1 font-weight-medium">{{ duplicates }}</h2>
-                            </div>
-                            <h6 class="text-white-50 font-weight-normal mb-0 w-100 text-truncate">Duplicates</h6>
-                        </div>
-                        <div class="ms-auto mt-md-3 mt-lg-0">
-                            <span class="opacity-7 text-white"><i data-feather="copy" class="feather-xl"></i></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Action Cards -->
-    <div class="row mt-4">
-        <div class="col-sm-6 col-lg-3">
-            <div class="card border-end">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div>
-                            <div class="d-inline-flex align-items-center">
-                                <h2 class="text-dark mb-1 font-weight-medium">{{ emails_sent }}</h2>
-                            </div>
-                            <h6 class="text-muted font-weight-normal mb-0 w-100 text-truncate">Emails Sent</h6>
-                        </div>
-                        <div class="ms-auto mt-md-3 mt-lg-0">
-                            <span class="opacity-7 text-primary"><i data-feather="mail" class="feather-xl"></i></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card border-end">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div>
-                            <div class="d-inline-flex align-items-center">
-                                <h2 class="text-dark mb-1 font-weight-medium">{{ followups }}</h2>
-                            </div>
-                            <h6 class="text-muted font-weight-normal mb-0 w-100 text-truncate">Follow-ups</h6>
-                        </div>
-                        <div class="ms-auto mt-md-3 mt-lg-0">
-                            <span class="opacity-7 text-warning"><i data-feather="calendar" class="feather-xl"></i></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card border-end">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div>
-                            <div class="d-inline-flex align-items-center">
-                                <h2 class="text-dark mb-1 font-weight-medium">{{ quotations }}</h2>
-                            </div>
-                            <h6 class="text-muted font-weight-normal mb-0 w-100 text-truncate">Quotations</h6>
-                        </div>
-                        <div class="ms-auto mt-md-3 mt-lg-0">
-                            <span class="opacity-7 text-info"><i data-feather="file-text" class="feather-xl"></i></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-sm-6 col-lg-3">
-            <div class="card">
-                <div class="card-body">
-                    <div class="d-flex align-items-center">
-                        <div>
-                            <div class="d-inline-flex align-items-center">
-                                <h2 class="text-dark mb-1 font-weight-medium">{{ converted }}</h2>
-                            </div>
-                            <h6 class="text-muted font-weight-normal mb-0 w-100 text-truncate">Converted Leads</h6>
-                        </div>
-                        <div class="ms-auto mt-md-3 mt-lg-0">
-                            <span class="opacity-7 text-success"><i data-feather="award" class="feather-xl"></i></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Charts and Tables -->
-    <div class="row mt-4">
-        <div class="col-lg-8 col-md-12">
-            <div class="card">
-                <div class="card-body">
-                    <h4 class="card-title">Lead Acquisition Trend</h4>
-                    <div class="mt-4 position-relative" style="height:294px;">
-                        <canvas id="leadsChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-4 col-md-12">
-            <div class="card">
-                <div class="card-body">
-                    <h4 class="card-title">Lead Quality</h4>
-                    <div class="mt-4 pb-3" style="height:294px;">
-                        <canvas id="qualityChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
+{% if overdue_followups or pending_reviews %}
+<div class="row"><div class="col-12">
+  <div class="card border-start border-4 border-danger">
+    <div class="card-body py-3">
+      <h6 class="mb-2"><i data-feather="alert-circle" class="feather-sm text-danger"></i>
+        Needs your attention</h6>
+      <div class="d-flex flex-wrap gap-2">
+        {% if overdue_followups %}
+        <a href="{% url 'followups:dashboard' %}" class="btn btn-danger btn-sm">
+          {{ overdue_followups }} follow-up{{ overdue_followups|pluralize }} overdue</a>
+        {% endif %}
+        {% if pending_reviews %}
+        <a href="{% url 'leads:review_list' %}" class="btn btn-warning btn-sm text-dark">
+          {{ pending_reviews }} possible duplicate{{ pending_reviews|pluralize }} to check</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div></div>
+{% endif %}
+
+<div class="row">
+  {% for tile in tiles %}
+  <div class="col-6 col-md-4 col-xl-3 mb-3">
+    <a href="{{ tile.url }}" class="text-decoration-none">
+      <div class="card h-100 stat-tile" style="border-left-color:var(--bs-{{ tile.colour }})">
+        <div class="card-body py-3">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="count text-{{ tile.colour }}">{{ tile.count }}</div>
+              <div class="text-muted small">{{ tile.label }}</div>
+            </div>
+            <i data-feather="{{ tile.icon }}" class="text-{{ tile.colour }}"></i>
+          </div>
+        </div>
+      </div>
+    </a>
+  </div>
+  {% endfor %}
 </div>
 
-<!-- Use Chart.js since it's easy to add -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        // Line chart for trends
-        const ctx = document.getElementById('leadsChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
-                datasets: [{
-                    label: 'New Leads',
-                    data: [12, 19, 3, 5, 2, 3, {{ total_leads }}],
-                    borderColor: '#5f76e8',
-                    backgroundColor: 'rgba(95, 118, 232, 0.1)',
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
-                }
-            }
-        });
+<div class="row">
+  <div class="col-lg-4 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h6 class="card-title">Today's email allowance</h6>
+        <div class="d-flex align-items-baseline gap-2">
+          <span class="count text-primary">{{ quota_used }}</span>
+          <span class="text-muted">of {{ quota_limit }} sent</span>
+        </div>
+        <div class="progress mt-2" style="height:8px">
+          <div class="progress-bar {% if quota_left == 0 %}bg-danger{% else %}bg-primary{% endif %}"
+               style="width:{% widthratio quota_used quota_limit 100 %}%"></div>
+        </div>
+        <small class="text-muted d-block mt-2">
+          {% if quota_left %}{{ quota_left }} left today.
+          {% else %}Limit reached — you can send again tomorrow.{% endif %}
+        </small>
+        <hr>
+        <div class="d-flex justify-content-between small">
+          <span class="text-muted">Sent all time</span><strong>{{ emails_total }}</strong>
+        </div>
+        <div class="d-flex justify-content-between small">
+          <span class="text-muted">Follow-ups due this week</span><strong>{{ due_this_week }}</strong>
+        </div>
+        <div class="d-flex justify-content-between small">
+          <span class="text-muted">Leads needing better data</span><strong>{{ weak_leads }}</strong>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        // Doughnut chart for quality
-        const ctx2 = document.getElementById('qualityChart').getContext('2d');
-        new Chart(ctx2, {
-            type: 'doughnut',
-            data: {
-                labels: ['Valid', 'Incomplete', 'Duplicates'],
-                datasets: [{
-                    data: [{{ valid_leads }}, {{ incomplete_leads }}, {{ duplicates }}],
-                    backgroundColor: ['#22ca80', '#ff4f70', '#01caf1'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '75%',
-                plugins: {
-                    legend: { position: 'bottom' }
-                }
-            }
-        });
-    });
-</script>
+  <div class="col-lg-8 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="card-title mb-0">Chase these next</h6>
+          <a href="{% url 'followups:dashboard' %}" class="btn btn-link btn-sm p-0">See all</a>
+        </div>
+        {% if attention_leads %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0 responsive-stack">
+            <thead><tr>
+              <th>Company</th><th>Status</th><th>Due</th><th></th>
+            </tr></thead>
+            <tbody>
+            {% for lead in attention_leads %}
+            <tr>
+              <td data-label="Company">
+                <a href="{% url 'leads:detail' lead.id %}">{{ lead.company.company_name }}</a>
+              </td>
+              <td data-label="Status">
+                <span class="badge bg-{{ lead.status|status_colour }}">{{ lead.get_status_display }}</span>
+              </td>
+              <td data-label="Due">
+                <span class="{% if lead.is_follow_up_overdue %}text-danger fw-bold{% endif %}">
+                  {{ lead.follow_up_date|date:"d M" }}</span>
+              </td>
+              <td data-label="" class="text-end">
+                <a href="{% url 'emails:compose' lead.id %}"
+                   class="btn btn-outline-primary btn-sm">Email</a>
+              </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        {% include 'partials/empty.html' with icon='check-circle' title='Nothing is overdue' hint='Every follow-up is up to date.' %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if recent_emails %}
+<div class="row"><div class="col-12">
+  <div class="card">
+    <div class="card-body">
+      <h6 class="card-title">Recently sent</h6>
+      <ul class="list-unstyled mb-0 small">
+        {% for log in recent_emails %}
+        <li class="d-flex justify-content-between border-bottom py-2">
+          <span class="wrap-any">
+            <a href="{% url 'leads:detail' log.lead_id %}">{{ log.lead.company.company_name }}</a>
+            <span class="text-muted">— {{ log.subject|truncatechars:60 }}</span>
+          </span>
+          <span class="text-muted text-nowrap ms-2">{{ log.sent_at|date:"d M, H:i" }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div></div>
+{% endif %}
+
 {% endblock %}

@@ -1,0 +1,30 @@
+# The web application.
+#   cp deploy/leadcrm.service /etc/systemd/system/
+#   systemctl enable --now leadcrm
+[Unit]
+Description=Lead Generation CRM (web)
+After=network.target
+
+[Service]
+Type=notify
+User=leadcrm
+Group=leadcrm
+WorkingDirectory=/srv/leadcrm/app/demo
+EnvironmentFile=/srv/leadcrm/app/demo/.env
+ExecStart=/srv/leadcrm/app/demo/.venv/bin/gunicorn config.wsgi:application \
+    --bind 127.0.0.1:8001 \
+    --workers 3 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile -
+Restart=always
+RestartSec=5
+
+# The app only ever needs to write to its own directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/srv/leadcrm
+
+[Install]
+WantedBy=multi-user.target

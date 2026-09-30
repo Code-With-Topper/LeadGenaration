@@ -1,9 +1,12 @@
 from django.urls import path
+
 from . import views
 
 app_name = 'crm'
 
 urlpatterns = [
-    path('pipeline/', views.pipeline_view, name='pipeline'),
-    path('pipeline/update/<int:lead_id>/', views.update_lead_status, name='update_lead_status'),
+    path('', views.pipeline, name='pipeline'),
+    path('activity/', views.activity_log, name='activity_log'),
+    path('<int:lead_id>/status/', views.update_status, name='update_status'),
+    path('<int:lead_id>/note/', views.add_note, name='add_note'),
 ]

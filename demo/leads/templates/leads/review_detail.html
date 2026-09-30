@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% load crm_extras %}
+{% block title %}Is this the same company?{% endblock %}
+{% block page_title %}Is this the same company?{% endblock %}
+{% block page_subtitle %}
+Match confidence {{ review.match_score }}% — {{ review.match_reason }}
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width:22%">Field</th>
+            <th>Already in your database</th>
+            <th>New record ({{ review.origin|default:"imported" }})</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+        <tr class="{% if row.differs %}table-warning{% endif %}">
+          <td class="text-muted small">{{ row.label }}</td>
+          <td class="wrap-any">{{ row.existing|dash }}</td>
+          <td class="wrap-any">
+            {{ row.incoming|dash }}
+            {% if row.only_in_new %}
+            <span class="badge bg-success ms-1">new information</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% if review.is_pending %}
+<div class="card">
+  <div class="card-body">
+    <h6 class="card-title">What should happen?</h6>
+    <form method="post" action="{% url 'leads:review_resolve' review.id %}">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-12 col-md-6 col-xl-3">
+          <button name="decision" value="merge" class="btn btn-success w-100 h-100 py-3">
+            <i data-feather="git-merge"></i><br>
+            <strong>Merge them</strong>
+            <div class="small opacity-75">Keep one company, fill in any blanks
+              from the new record</div>
+          </button>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+          <button name="decision" value="existing" class="btn btn-outline-secondary w-100 h-100 py-3">
+            <i data-feather="shield"></i><br>
+            <strong>Keep what I have</strong>
+            <div class="small opacity-75">Throw the new record away</div>
+          </button>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+          <button name="decision" value="new" class="btn btn-outline-primary w-100 h-100 py-3">
+            <i data-feather="refresh-cw"></i><br>
+            <strong>Use the new data</strong>
+            <div class="small opacity-75">Overwrite the old details</div>
+          </button>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+          <button name="decision" value="separate" class="btn btn-outline-dark w-100 h-100 py-3">
+            <i data-feather="copy"></i><br>
+            <strong>Not the same</strong>
+            <div class="small opacity-75">Save it as a separate company</div>
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-success">
+  Decided: <strong>{{ review.get_status_display }}</strong>
+  {% if review.resolved_at %}on {{ review.resolved_at|date:"d M Y, H:i" }}{% endif %}
+  {% if review.resolved_by %}by {{ review.resolved_by.username }}{% endif %}.
+</div>
+{% endif %}
+
+<a href="{% url 'leads:review_list' %}" class="btn btn-link">&larr; Back to the list</a>
+{% endblock %}

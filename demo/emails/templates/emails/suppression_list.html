@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% load crm_extras %}
+{% block title %}Do Not Contact{% endblock %}
+{% block page_title %}Do Not Contact{% endblock %}
+{% block page_subtitle %}
+{{ total }} address{{ total|pluralize:"es" }} that will never be emailed again
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-5">
+    <div class="card"><div class="card-body">
+      <h6 class="card-title">Add an address</h6>
+      <form method="post">
+        {% csrf_token %}
+        <div class="input-group">
+          <input name="email" type="email" class="form-control"
+                 placeholder="someone@example.com" required>
+          <button class="btn btn-primary">Block</button>
+        </div>
+      </form>
+      <p class="small text-muted mt-3 mb-0">
+        Anyone who clicks the unsubscribe link in your email is added here
+        automatically, and the system refuses to send to them afterwards.
+        Use this form for people who ask you by phone or in person.
+      </p>
+    </div></div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card"><div class="card-body">
+      {% if entries %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle responsive-stack">
+          <thead><tr><th>Address</th><th>Reason</th><th>Added</th></tr></thead>
+          <tbody>
+          {% for entry in entries %}
+          <tr>
+            <td data-label="Address" class="wrap-any">{{ entry.email|default:entry.phone }}</td>
+            <td data-label="Reason" class="small">{{ entry.get_reason_display }}</td>
+            <td data-label="Added" class="small text-muted">{{ entry.created_at|date:"d M Y" }}</td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% include 'partials/pagination.html' %}
+      {% else %}
+        {% include 'partials/empty.html' with icon='slash' title='Nobody has unsubscribed' %}
+      {% endif %}
+    </div></div>
+  </div>
+</div>
+{% endblock %}

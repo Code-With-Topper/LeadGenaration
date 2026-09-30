@@ -1,118 +1,205 @@
-import base64
-from django.shortcuts import render, redirect, get_object_or_404
+from django.conf import settings
 from django.contrib import messages
-from django.core.mail import EmailMessage
-from leads.models import Lead
-from .models import EmailLog, EmailCampaign, EmailTemplate
-from .tasks import send_campaign_task
+from django.contrib.auth.decorators import login_required
+from django.core import signing
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
-def send_manual_email(request, lead_id):
-    lead = get_object_or_404(Lead, id=lead_id)
-    
+from leads.models import Lead, Suppression
+
+from .models import EmailLog, EmailQuota, EmailTemplate
+from .services import check_can_send, send_to_lead
+
+
+@login_required
+def compose(request, lead_id):
+    """Write and send one email to one lead."""
+    lead = get_object_or_404(
+        Lead.objects.select_related('company', 'contact'), id=lead_id)
+    allowed, reason = check_can_send(lead)
+
     if request.method == 'POST':
-        recipient = request.POST.get('to')
-        subject = request.POST.get('subject')
-        message_body = request.POST.get('message')
-        attachment = request.FILES.get('attachment')
-        
-        try:
-            # Send Email
-            email = EmailMessage(
-                subject=subject,
-                body=message_body,
-                to=[recipient],
-            )
-            if attachment:
-                email.attach(attachment.name, attachment.read(), attachment.content_type)
-            
-            email.send(fail_silently=False)
-            
-            # Log it
-            log_record = EmailLog.objects.create(
-                lead=lead,
-                recipient=recipient,
-                subject=subject,
-                message=message_body,
-                attachment=attachment,
-                status='SENT'
-            )
-            
+        if not allowed:
+            messages.error(request, reason)
+            return redirect('leads:detail', lead_id=lead.id)
+
+        template_id = request.POST.get('template')
+        template = (EmailTemplate.objects.filter(id=template_id).first()
+                    if template_id else None)
+
+        result = send_to_lead(
+            lead,
+            subject=(request.POST.get('subject') or '').strip(),
+            body=request.POST.get('message') or '',
+            attachment=request.FILES.get('attachment'),
+            template=template,
+            user=request.user,
+            mark_profile_sent=request.POST.get('mark_profile_sent') == 'on',
+        )
+
+        if result.ok:
             from reports.utils import log_audit
-            log_audit('Email Sent', 'EmailLog', log_record.id, f"Sent to {recipient}: {subject}", request.user if request.user.is_authenticated else None)
-            
-            # Update Lead Status
-            if lead.status == 'NEW':
-                lead.status = 'CONTACTED'
-                lead.save()
-                
-            messages.success(request, f"Email sent successfully to {recipient}!")
-        except Exception as e:
-            EmailLog.objects.create(
-                lead=lead,
-                recipient=recipient,
-                subject=subject,
-                message=message_body,
-                status='FAILED',
-                error_message=str(e)
-            )
-            messages.error(request, f"Failed to send email: {e}")
-            
+            log_audit('Email Sent', 'EmailLog', result.log.id,
+                      f"To {result.log.recipient}: {result.log.subject}",
+                      request.user)
+            messages.success(request, result.message)
+        else:
+            messages.error(request, result.message)
         return redirect('leads:detail', lead_id=lead.id)
-        
-    # Render compose modal/page (or typically this would just be a redirect back with a message since it's a POST handler)
-    return redirect('leads:detail', lead_id=lead.id)
 
-def campaign_list(request):
-    campaigns = EmailCampaign.objects.all().order_by('-created_at')
-    return render(request, 'emails/campaign_list.html', {'campaigns': campaigns})
-
-def campaign_create(request):
-    if request.method == 'POST':
-        name = request.POST.get('name')
-        lead_ids = request.POST.getlist('leads')
-        
-        template_1_id = request.POST.get('template_1')
-        t1 = get_object_or_404(EmailTemplate, id=template_1_id)
-        
-        # Create campaign
-        campaign = EmailCampaign.objects.create(name=name, template=t1, status='QUEUED')
-        
-        # Add leads
-        if lead_ids:
-            leads = Lead.objects.filter(id__in=lead_ids)
-            campaign.leads.set(leads)
-            
-        # Create sequence steps
-        from .models import CampaignSequenceStep
-        CampaignSequenceStep.objects.create(campaign=campaign, template=t1, step_order=1, delay_days=0)
-        
-        t2_id = request.POST.get('template_2')
-        if t2_id:
-            t2 = get_object_or_404(EmailTemplate, id=t2_id)
-            d2 = int(request.POST.get('delay_2', 3))
-            CampaignSequenceStep.objects.create(campaign=campaign, template=t2, step_order=2, delay_days=d2)
-            
-        t3_id = request.POST.get('template_3')
-        if t3_id:
-            t3 = get_object_or_404(EmailTemplate, id=t3_id)
-            d3 = int(request.POST.get('delay_3', 7))
-            CampaignSequenceStep.objects.create(campaign=campaign, template=t3, step_order=3, delay_days=d3)
-            
-        # Trigger Celery Task
-        send_campaign_task.delay(campaign.id, step_order=1)
-        messages.success(request, f"Drip Campaign '{name}' started successfully.")
-        return redirect('emails:campaign_list')
-        
     templates = EmailTemplate.objects.all()
-    leads = Lead.objects.exclude(company__company_email__exact='').exclude(company__company_email__isnull=True)
-    return render(request, 'emails/campaign_create.html', {'templates': templates, 'leads': leads})
+    selected = templates.filter(is_default=True).first() or templates.first()
+    subject = body = ''
+    if selected:
+        subject, body = selected.render(lead)
 
-def unsubscribe(request, email_b64):
+    return render(request, 'emails/compose.html', {
+        'lead': lead,
+        'templates': templates,
+        'selected_template': selected,
+        'subject': subject,
+        'body': body,
+        'can_send': allowed,
+        'reason': reason,
+        'quota_used': EmailQuota.used_today(),
+        'quota_limit': EmailQuota.limit(),
+        'quota_left': EmailQuota.remaining_today(),
+    })
+
+
+@login_required
+def template_preview(request, lead_id, template_id):
+    """Fill a template for this lead — used when the user switches template."""
+    from django.http import JsonResponse
+    lead = get_object_or_404(Lead, id=lead_id)
+    template = get_object_or_404(EmailTemplate, id=template_id)
+    subject, body = template.render(lead)
+    return JsonResponse({'subject': subject, 'body': body})
+
+
+@login_required
+def log_list(request):
+    """Every email ever attempted, newest first."""
+    from django.core.paginator import Paginator
+
+    logs = EmailLog.objects.select_related('lead__company').all()
+    status = request.GET.get('status')
+    if status in dict(EmailLog.STATUS_CHOICES):
+        logs = logs.filter(status=status)
+
+    page = Paginator(logs, settings.PAGE_SIZE).get_page(request.GET.get('page'))
+    return render(request, 'emails/log_list.html', {
+        'page_obj': page,
+        'logs': page.object_list,
+        'status': status or '',
+        'status_choices': EmailLog.STATUS_CHOICES,
+        'quota_used': EmailQuota.used_today(),
+        'quota_limit': EmailQuota.limit(),
+        'quota_left': EmailQuota.remaining_today(),
+        'total_sent': EmailLog.objects.filter(status='SENT').count(),
+    })
+
+
+@login_required
+def template_list(request):
+    templates = EmailTemplate.objects.all()
+    return render(request, 'emails/template_list.html', {'templates': templates})
+
+
+@login_required
+def template_edit(request, template_id=None):
+    template = (get_object_or_404(EmailTemplate, id=template_id)
+                if template_id else None)
+
+    if request.method == 'POST':
+        name = (request.POST.get('name') or '').strip()
+        subject = (request.POST.get('subject') or '').strip()
+        body = request.POST.get('body') or ''
+        if not (name and subject and body):
+            messages.error(request, 'Name, subject and message are all required.')
+        else:
+            is_default = request.POST.get('is_default') == 'on'
+            if template is None:
+                template = EmailTemplate(); 
+            template.name, template.subject, template.body = name, subject, body
+            template.is_default = is_default
+            template.save()
+            if is_default:
+                EmailTemplate.objects.exclude(id=template.id).update(is_default=False)
+            messages.success(request, f"Template '{name}' saved.")
+            return redirect('emails:template_list')
+
+    return render(request, 'emails/template_form.html', {
+        'template': template,
+        'placeholders': EmailTemplate.PLACEHOLDERS,
+    })
+
+
+@login_required
+@require_POST
+def template_delete(request, template_id):
+    template = get_object_or_404(EmailTemplate, id=template_id)
+    name = template.name
+    template.delete()
+    messages.success(request, f"Template '{name}' deleted.")
+    return redirect('emails:template_list')
+
+
+@login_required
+def suppression_list(request):
+    """The do-not-contact list, so the client can see and manage it."""
+    from django.core.paginator import Paginator
+
+    if request.method == 'POST':
+        email = (request.POST.get('email') or '').strip()
+        if Suppression.add_email(email, reason='MANUAL', note='Added by user'):
+            messages.success(request, f"{email} will no longer be emailed.")
+        else:
+            messages.error(request, 'Enter a valid email address.')
+        return redirect('emails:suppression_list')
+
+    entries = Suppression.objects.all()
+    page = Paginator(entries, settings.PAGE_SIZE).get_page(request.GET.get('page'))
+    return render(request, 'emails/suppression_list.html', {
+        'page_obj': page, 'entries': page.object_list,
+        'total': entries.count(),
+    })
+
+
+def unsubscribe(request, token):
+    """
+    A working unsubscribe.
+
+    The address is written to the suppression list, which `check_can_send`
+    consults before every send — so this actually stops future email rather
+    than only showing a confirmation page.
+    """
     try:
-        email = base64.b64decode(email_b64).decode('utf-8')
-        # Logic to add to an Unsubscribe/DoNotContact list
-        # For this CRM, we could add a boolean to Contact/Company
-        messages.success(request, f"{email} has been unsubscribed successfully.")
-    except Exception:
-        messages.error(request, "Invalid unsubscribe link.")
-    return render(request, 'emails/unsubscribed.html')
+        data = signing.loads(token, salt='unsubscribe', max_age=60 * 60 * 24 * 365 * 5)
+        email = data['email']
+    except signing.BadSignature:
+        return render(request, 'emails/unsubscribed.html',
+                      {'ok': False,
+                       'message': 'This unsubscribe link is not valid.'})
+
+    Suppression.add_email(email, reason='UNSUBSCRIBED',
+                          note='Unsubscribed via email link')
+
+    # Close any open lead using this address, so it also leaves the pipeline.
+    closed = 0
+    for lead in Lead.objects.filter(company__normalized_email=email) \
+                            .exclude(status__in=Lead.CLOSED_STATUSES):
+        lead.status = Lead.NOT_RELEVANT
+        lead.remarks = (lead.remarks + '\nUnsubscribed by recipient.').strip()
+        lead.follow_up_date = None
+        lead.save(update_fields=['status', 'remarks', 'follow_up_date', 'updated_at'])
+        closed += 1
+
+    return render(request, 'emails/unsubscribed.html', {
+        'ok': True,
+        'email': email,
+        'company_name': settings.COMPANY_NAME,
+        'message': f"{email} has been removed. You will not receive any more "
+                   f"emails from us.",
+        'closed': closed,
+    })

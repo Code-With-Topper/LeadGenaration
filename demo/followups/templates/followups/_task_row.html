@@ -1,0 +1,22 @@
+{% load crm_extras %}
+<tr>
+  <td data-label="Date" class="small text-nowrap">
+    <span class="{% if task.is_overdue %}text-danger fw-bold{% endif %}">
+      {{ task.date|date:"d M Y" }}{% if task.time %} {{ task.time|time:"H:i" }}{% endif %}</span>
+  </td>
+  <td data-label="Company" class="wrap-any">
+    <a href="{% url 'leads:detail' task.lead_id %}">{{ task.company_name }}</a>
+  </td>
+  <td data-label="Type" class="small">{{ task.get_follow_up_type_display }}</td>
+  <td data-label="Note" class="small text-muted wrap-any">{{ task.notes|dash|truncatechars:70 }}</td>
+  <td data-label="" class="text-end">
+    {% if task.status == 'PENDING' %}
+    <form method="post" action="{% url 'followups:complete' task.id %}">
+      {% csrf_token %}
+      <button class="btn btn-sm btn-outline-success">Done</button>
+    </form>
+    {% else %}
+    <span class="badge bg-success">{{ task.get_status_display }}</span>
+    {% endif %}
+  </td>
+</tr>

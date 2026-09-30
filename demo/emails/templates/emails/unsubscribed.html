@@ -1,25 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Unsubscribed</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; color: #333; }
-        .container { max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
-        .success { color: #28a745; }
-        .error { color: #dc3545; }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Unsubscribe</title>
+<style>
+  body { font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+         background:#f6f7fb; margin:0; padding:2rem 1rem; color:#212529; }
+  .box { max-width: 520px; margin: 3rem auto; background:#fff; padding:2rem;
+         border-radius:.75rem; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  h1 { font-size:1.25rem; margin:0 0 1rem; }
+  p { line-height:1.6; margin:0 0 1rem; }
+  .ok { color:#198754; } .bad { color:#dc3545; }
+  .muted { color:#6c757d; font-size:.875rem; }
+</style>
 </head>
 <body>
-    <div class="container">
-        {% if messages %}
-            {% for message in messages %}
-                <h3 class="{% if message.tags == 'success' %}success{% else %}error{% endif %}">{{ message }}</h3>
-            {% endfor %}
-        {% else %}
-            <h3>Unsubscribe Request Processed</h3>
-        {% endif %}
-        <p>You have been removed from our mailing list and will not receive further automated communications.</p>
-    </div>
+  <div class="box">
+    {% if ok %}
+    <h1 class="ok">You have been unsubscribed</h1>
+    <p>{{ message }}</p>
+    <p class="muted">
+      Your address has been added to our do-not-contact list, so it is now
+      blocked in our system rather than just noted. If you received this in
+      error, simply reply to our last email and we will add you back.
+    </p>
+    {% if company_name %}<p class="muted">— {{ company_name }}</p>{% endif %}
+    {% else %}
+    <h1 class="bad">This link is not valid</h1>
+    <p>{{ message }}</p>
+    <p class="muted">
+      The link may have been broken by your email program. Reply to the email
+      with the word "unsubscribe" and we will remove you by hand.
+    </p>
+    {% endif %}
+  </div>
 </body>
 </html>

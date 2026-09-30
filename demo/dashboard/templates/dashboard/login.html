@@ -1,62 +1,56 @@
-<!DOCTYPE html>
-<html dir="ltr">
-
+{% load static crm_extras %}<!DOCTYPE html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login - CRM</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            background-color: #f8f9fa;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .login-box {
-            width: 100%;
-            max-width: 400px;
-            padding: 20px;
-        }
-        .card {
-            border: none;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · {{ company_name|default:"S.D Enterprise" }}</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" sizes="16x16" href="{% static 'images/favicon.png' %}">
+<link href="{% static 'css/style.min.css' %}" rel="stylesheet">
+<style>
+  body { background:#f6f7fb; }
+  .login-wrap { min-height:100vh; display:flex; align-items:center;
+                justify-content:center; padding:1.5rem; }
+  .login-card { width:100%; max-width:400px; }
+</style>
 </head>
-
 <body>
-    <div class="login-box">
-        <div class="card">
-            <div class="card-body p-4">
-                <div class="text-center mb-4">
-                    <h2 class="font-weight-bold">Lead CRM</h2>
-                    <p class="text-muted">Sign In to continue</p>
-                </div>
-                
-                {% if messages %}
-                    {% for message in messages %}
-                        <div class="alert alert-danger">{{ message }}</div>
-                    {% endfor %}
-                {% endif %}
-                
-                <form action="{% url 'login' %}" method="POST">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label class="form-label">Username</label>
-                        <input type="text" class="form-control" name="username" required autofocus>
-                    </div>
-                    <div class="mb-4">
-                        <label class="form-label">Password</label>
-                        <input type="password" class="form-control" name="password" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100 py-2">Sign In</button>
-                </form>
-            </div>
+<div class="login-wrap">
+  <div class="card login-card shadow-sm">
+    <div class="card-body p-4">
+      <div class="text-center mb-4">
+        <img src="{% static 'images/sd_enterprise.png' %}" alt="Logo"
+             class="img-fluid mb-2" style="max-height:52px">
+        <h5 class="mb-1">Lead Generation &amp; CRM</h5>
+        <p class="text-muted small mb-0">Sign in to continue</p>
+      </div>
+
+      {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags|alert_class }} py-2 small">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="post" autocomplete="on">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label">Username</label>
+          <input name="username" class="form-control" required autofocus
+                 autocapitalize="none" autocomplete="username">
         </div>
+        <div class="mb-3">
+          <label class="form-label">Password</label>
+          <input name="password" type="password" class="form-control" required
+                 autocomplete="current-password">
+        </div>
+        <button class="btn btn-primary w-100">Sign in</button>
+      </form>
+
+      <p class="text-center text-muted small mt-4 mb-0">
+        Works on your phone and your laptop.
+      </p>
     </div>
+  </div>
+</div>
 </body>
 </html>

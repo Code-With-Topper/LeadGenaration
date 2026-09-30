@@ -1,0 +1,51 @@
+{% load crm_extras %}
+<div class="card">
+  <div class="card-body">
+    <h6 class="card-title">
+      <span class="badge bg-{{ colour }}">{{ leads|length }}</span> {{ heading }}
+    </h6>
+    {% if leads %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0 responsive-stack">
+        <thead><tr>
+          <th>Due</th><th>Company</th><th>Status</th><th>Phone</th><th></th>
+        </tr></thead>
+        <tbody>
+        {% for lead in leads %}
+        <tr>
+          <td data-label="Due" class="small text-nowrap">
+            <span class="{% if lead.is_follow_up_overdue %}text-danger fw-bold{% endif %}">
+              {{ lead.follow_up_date|date:"d M Y" }}</span>
+          </td>
+          <td data-label="Company" class="wrap-any">
+            <a href="{% url 'leads:detail' lead.id %}">{{ lead.company.company_name }}</a>
+            <div class="text-muted small">{{ lead.company.location|dash }}</div>
+          </td>
+          <td data-label="Status">
+            <span class="badge bg-{{ lead.status|status_colour }}">{{ lead.get_status_display }}</span>
+          </td>
+          <td data-label="Phone" class="small">
+            {% if lead.company.company_phone %}
+            <a href="tel:{{ lead.company.company_phone }}">{{ lead.company.company_phone }}</a>
+            {% else %}—{% endif %}
+          </td>
+          <td data-label="" class="text-end text-nowrap">
+            <a href="{% url 'emails:compose' lead.id %}"
+               class="btn btn-sm btn-outline-primary">Email</a>
+            <form method="post" action="{% url 'followups:snooze' lead.id %}"
+                  class="d-inline">
+              {% csrf_token %}
+              <input type="hidden" name="days" value="7">
+              <button class="btn btn-sm btn-outline-secondary">+7d</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-muted small mb-0">{{ empty }}</p>
+    {% endif %}
+  </div>
+</div>

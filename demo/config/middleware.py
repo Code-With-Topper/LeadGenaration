@@ -1,30 +1,37 @@
 from django.shortcuts import redirect
 from django.urls import reverse
 
+
 class LoginRequiredMiddleware:
+    """
+    Everything is private unless it is explicitly public.
+
+    A deny-by-default list is the safe way round: a view added later is
+    protected automatically rather than being exposed until somebody notices.
+    """
+
     def __init__(self, get_response):
         self.get_response = get_response
 
+    # Paths reachable without signing in.
+    PUBLIC_PREFIXES = (
+        '/login/',
+        '/privacy-policy/',
+        '/terms/',
+        '/robots.txt',
+        '/sitemap.xml',
+        '/static/',
+        # Unsubscribing must work for a recipient who has no account.
+        '/emails/unsubscribe/',
+    )
+
     def __call__(self, request):
-        # Exclude paths that don't need authentication
-        allowed_paths = [reverse('login'), '/admin/', '/', '/privacy-policy/', '/terms/', '/sitemap.xml', '/robots.txt']
-        
-        # If user is not authenticated and path is not allowed
-        if not request.user.is_authenticated:
-            if not any(request.path == p or (p != '/' and request.path.startswith(p)) for p in allowed_paths):
-                return redirect('login')
-        else:
-            # Role-Based Access Control
-            if not request.user.is_superuser:
-                groups = [g.name for g in request.user.groups.all()]
-                is_staff = 'Staff' in groups
-                is_manager = 'Manager' in groups
-                
-                # Staff cannot access reports or settings
-                if is_staff and not is_manager:
-                    if request.path.startswith('/reports/') or request.path.startswith('/settings/'):
-                        from django.core.exceptions import PermissionDenied
-                        raise PermissionDenied("You do not have permission to access this page.")
-                        
-        response = self.get_response(request)
-        return response
+        if not request.user.is_authenticated and not self._is_public(request.path):
+            login_url = reverse('login')
+            return redirect(f'{login_url}?next={request.path}')
+        return self.get_response(request)
+
+    def _is_public(self, path):
+        if path == '/':
+            return True
+        return any(path.startswith(prefix) for prefix in self.PUBLIC_PREFIXES)

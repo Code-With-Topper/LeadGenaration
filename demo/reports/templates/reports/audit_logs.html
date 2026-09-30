@@ -1,70 +1,44 @@
 {% extends 'base.html' %}
-
-{% block title %}Audit Logs - Lead CRM{% endblock %}
+{% load crm_extras %}
+{% block title %}Audit Log{% endblock %}
+{% block page_title %}Audit Log{% endblock %}
+{% block page_subtitle %}Every change, who made it and when{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Audit Logs</h3>
-            <div class="d-flex align-items-center mb-4">
-                <nav aria-label="breadcrumb">
-                    <ol class="breadcrumb m-0 p-0">
-                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
-                        <li class="breadcrumb-item"><a href="{% url 'reports:dashboard' %}">Reports</a></li>
-                        <li class="breadcrumb-item active" aria-current="page">Audit Logs</li>
-                    </ol>
-                </nav>
-            </div>
-        </div>
+<div class="card"><div class="card-body">
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-8 col-md-4">
+      <select name="action" class="form-select">
+        <option value="">All actions</option>
+        {% for name in actions %}
+        <option value="{{ name }}" {% if action == name %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
     </div>
-    
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-body">
-                    <h4 class="card-title">System Activity</h4>
-                    <p class="text-muted font-14">Showing the last 500 actions performed in the CRM.</p>
-                    
-                    <div class="table-responsive">
-                        <table class="table table-hover table-sm text-nowrap">
-                            <thead class="bg-light">
-                                <tr>
-                                    <th>Date/Time</th>
-                                    <th>User</th>
-                                    <th>Action</th>
-                                    <th>Object</th>
-                                    <th>Details</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for log in logs %}
-                                <tr>
-                                    <td>{{ log.created_at|date:"M d, Y H:i:s" }}</td>
-                                    <td>
-                                        {% if log.performed_by %}
-                                        <span class="badge bg-primary rounded-pill">{{ log.performed_by.username }}</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary rounded-pill">System</span>
-                                        {% endif %}
-                                    </td>
-                                    <td><strong>{{ log.action }}</strong></td>
-                                    <td>{{ log.model_name }} (#{{ log.object_id }})</td>
-                                    <td class="text-wrap" style="max-width: 300px;">
-                                        <small class="text-muted">{{ log.changes|default:"-"|truncatechars:100 }}</small>
-                                    </td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="5" class="text-center py-4">No audit logs recorded yet.</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+    <div class="col-4 col-md-2 d-grid"><button class="btn btn-primary">Filter</button></div>
+  </form>
+
+  {% if logs %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle responsive-stack">
+      <thead><tr><th>When</th><th>Action</th><th>Record</th><th>Detail</th><th>By</th></tr></thead>
+      <tbody>
+      {% for log in logs %}
+      <tr>
+        <td data-label="When" class="small text-nowrap">{{ log.created_at|date:"d M Y, H:i" }}</td>
+        <td data-label="Action" class="small fw-semibold">{{ log.action }}</td>
+        <td data-label="Record" class="small text-muted">
+          {{ log.model_name|dash }}{% if log.object_id %} #{{ log.object_id }}{% endif %}</td>
+        <td data-label="Detail" class="small wrap-any">{{ log.changes|dash }}</td>
+        <td data-label="By" class="small">{{ log.performed_by.username|default:"system" }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include 'partials/pagination.html' %}
+  {% else %}
+    {% include 'partials/empty.html' with icon='shield' title='No entries yet' %}
+  {% endif %}
+</div></div>
 {% endblock %}

@@ -1,0 +1,15 @@
+# Background work and backups, if you prefer cron to the systemd worker.
+#   crontab -u leadcrm deploy/crontab.example
+
+APP=/srv/leadcrm/app/demo
+
+# One pass of all pending work. Safe to run every minute: it takes whatever is
+# outstanding and exits.
+* * * * * cd $APP && .venv/bin/python manage.py run_worker --once >> /srv/leadcrm/worker.log 2>&1
+
+# Follow-up reminders, first thing each morning. run_worker does this too; this
+# line just guarantees it happens at a predictable time.
+15 7 * * * cd $APP && .venv/bin/python manage.py process_followups >> /srv/leadcrm/worker.log 2>&1
+
+# Nightly database backup, keeping 30 days.
+30 2 * * * cd $APP && sqlite3 db.sqlite3 ".backup '/srv/leadcrm/backups/db-$(date +\%F).sqlite3'" && find /srv/leadcrm/backups -name 'db-*' -mtime +30 -delete

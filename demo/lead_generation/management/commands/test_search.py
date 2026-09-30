@@ -29,12 +29,21 @@ class Command(BaseCommand):
                             help='How many results to ask for.')
         parser.add_argument(
             '--debug', action='store_true',
-            help='Save each results page to a file, to see what came back.')
+            help='Save every page that returns nothing to ./search-debug/, '
+                 'so the real markup can be inspected.')
 
     def handle(self, *args, **options):
         ok = self.style.SUCCESS
         bad = self.style.ERROR
         warn = self.style.WARNING
+
+        if options['debug']:
+            # Every page that returns nothing gets written here, so the real
+            # markup can be looked at instead of guessed at.
+            from django.conf import settings
+            settings.SEARCH_DEBUG_DIR = 'search-debug'
+            self.stdout.write('   (--debug: pages that return nothing will be '
+                              'saved to ./search-debug/)')
 
         self.stdout.write('1. Starting the browser…')
         try:
@@ -103,8 +112,6 @@ class Command(BaseCommand):
                         self.stdout.write(warn(
                             '     the page answered but held no result links.'))
 
-                    if options['debug']:
-                        self._dump(browser, name)
 
                 self.stdout.write('')
                 if any_worked:
@@ -153,16 +160,6 @@ class Command(BaseCommand):
             self.stdout.write(
                 '       Run again with --debug to save the page and see what '
                 'came back.')
-
-    def _dump(self, browser, name):
-        """Save the page so its markup can be looked at afterwards."""
-        import pathlib
-        target = pathlib.Path(f'search-debug-{name.lower()}.html')
-        try:
-            target.write_text(browser.html(), encoding='utf-8')
-            self.stdout.write(f'       page saved to {target}')
-        except Exception as exc:
-            self.stdout.write(f'       could not save the page: {exc}')
 
     def _crawl_one(self, browser, url):
         """Crawl one site and print what was extracted."""

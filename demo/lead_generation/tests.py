@@ -148,19 +148,22 @@ class SearchSourceTests(TestCase):
         """
         names = [name for name, _fn in engine.SEARCH_SOURCES]
         self.assertEqual(names[0], 'DuckDuckGo')
-        self.assertIn('Bing', names)
-        self.assertIn('Google', names)
+        for expected in ('Mojeek', 'Bing', 'Google'):
+            self.assertIn(expected, names)
+        # Google last: the best index, and the quickest to refuse a server.
+        self.assertEqual(names[-1], 'Google')
 
     def test_a_blocked_source_is_dropped_after_two_refusals(self):
         state = engine.SearchState()
-        self.assertEqual(len(state.live_sources()), 3)
+        total = len(engine.SEARCH_SOURCES)
+        self.assertEqual(len(state.live_sources()), total)
 
         for _ in range(engine.SearchState.BLOCKS_BEFORE_GIVING_UP):
             state.record('DuckDuckGo', engine.SearchOutcome.BLOCKED)
 
         live = [name for name, _fn in state.live_sources()]
         self.assertNotIn('DuckDuckGo', live)
-        self.assertEqual(len(live), 2)
+        self.assertEqual(len(live), total - 1)
         self.assertFalse(state.all_blocked)
 
     def test_all_blocked_is_reported_once_every_source_refuses(self):
@@ -282,6 +285,107 @@ class NoMatchIsNotBlockedTests(TestCase):
         self.assertIn('10 link(s) on the page', note)
         self.assertIn('9 dropped as directory site', note)
         self.assertIn('1 dropped as listicle page', note)
+
+
+class BarrenRunTests(TestCase):
+    """
+    The case the run used to miss: every source answers, none ever returns a
+    company, and the run grinds through forty queries saying "empty" each time.
+    """
+
+    def test_a_run_that_finds_nothing_repeatedly_gives_up(self):
+        state = engine.SearchState()
+        for _ in range(engine.SearchState.BARREN_QUERIES_BEFORE_GIVING_UP):
+            state.note_query(False, 'DuckDuckGo: empty')
+        self.assertTrue(state.nothing_is_working)
+        self.assertIn('empty', state.last_reason)
+
+    def test_one_good_query_resets_the_count(self):
+        state = engine.SearchState()
+        for _ in range(engine.SearchState.BARREN_QUERIES_BEFORE_GIVING_UP - 1):
+            state.note_query(False)
+        state.note_query(True)
+        self.assertFalse(state.nothing_is_working)
+
+    def test_giving_up_is_not_the_same_as_being_blocked(self):
+        """Different cause, different fix, so a different message."""
+        state = engine.SearchState()
+        for _ in range(20):
+            state.note_query(False)
+        self.assertTrue(state.nothing_is_working)
+        self.assertFalse(state.all_blocked)
+
+    def test_the_two_explanations_say_different_things(self):
+        self.assertIn('refused this server', engine.BLOCKED_EXPLANATION)
+        self.assertIn('no result was a company website',
+                      engine.BARREN_EXPLANATION)
+        self.assertIn('test_search --debug', engine.BARREN_EXPLANATION)
+
+
+class SourceRobustnessTests(TestCase):
+    """
+    Every source needs more than one way in. A single stale selector must not
+    turn a working engine into "empty".
+    """
+
+    def test_mojeek_is_available_as_an_independent_source(self):
+        names = [name for name, _fn in engine.SEARCH_SOURCES]
+        self.assertIn('Mojeek', names)
+        # Ahead of the two that rate limit a server hardest.
+        self.assertLess(names.index('Mojeek'), names.index('Bing'))
+        self.assertLess(names.index('Mojeek'), names.index('Google'))
+
+    def test_duckduckgo_tries_both_of_its_endpoints(self):
+        visited = []
+
+        class FakeBrowser:
+            def goto(self, url):
+                visited.append(url)
+                return True
+
+            def evaluate(self, script, default=None):
+                return []
+
+            def html(self):
+                return ''
+
+            @property
+            def url(self):
+                return visited[-1] if visited else ''
+
+            def title(self):
+                return 'results'
+
+        engine.search_duckduckgo(FakeBrowser(), 'sponge iron', 5)
+        self.assertEqual(len(visited), 2, visited)
+        self.assertIn('lite.duckduckgo.com', visited[0])
+        self.assertIn('html.duckduckgo.com', visited[1])
+
+    def test_a_blocked_endpoint_stops_the_rest_being_tried(self):
+        visited = []
+
+        class BlockedBrowser:
+            def goto(self, url):
+                visited.append(url)
+                return True
+
+            def evaluate(self, script, default=None):
+                return []
+
+            def html(self):
+                return ''
+
+            @property
+            def url(self):
+                return 'https://duckduckgo.com/sorry'
+
+            def title(self):
+                return 'unusual traffic'
+
+        _results, outcome, _stats = engine.search_duckduckgo(
+            BlockedBrowser(), 'sponge iron', 5)
+        self.assertEqual(outcome, engine.SearchOutcome.BLOCKED)
+        self.assertEqual(len(visited), 1, 'a block should stop the loop')
 
 
 class ResultFilteringTests(TestCase):

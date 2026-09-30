@@ -479,37 +479,107 @@ def _finish_search(browser: Browser, anchors, limit, *, decode):
     return [], SearchOutcome.NO_MATCH, stats
 
 
+def _try_endpoints(browser: Browser, urls, limit, *, decode, selectors=()):
+    """
+    Try each endpoint until one gives results.
+
+    Search engines change their markup and retire endpoints without notice, so
+    every source here has more than one address and falls back to "every link
+    in the content area". One selector going stale must not silently turn a
+    working source into "empty".
+    """
+    last = ([], SearchOutcome.UNREACHABLE, ResultStats())
+
+    for url in urls:
+        if not browser.goto(url):
+            continue
+        if is_blocked_page(browser):
+            return [], SearchOutcome.BLOCKED, ResultStats()
+
+        anchors = _anchors(browser, *selectors)
+        results, outcome, stats = _finish_search(browser, anchors, limit,
+                                                 decode=decode)
+        if results:
+            return results, outcome, stats
+
+        last = ([], outcome, stats)
+        _save_debug_page(browser, url, outcome)
+
+    return last
+
+
 def search_duckduckgo(browser: Browser, query: str,
                       limit: int) -> tuple[list, str, ResultStats]:
     """
-    DuckDuckGo's HTML endpoint. Tried first, deliberately.
+    DuckDuckGo. Tried first, deliberately.
 
-    It renders without JavaScript and is by far the most tolerant of a server
-    doing this politely, so it is the source most likely to work from a small
-    VPS. Google and Bing are the fallbacks, not the other way round.
+    Both of its no-JavaScript endpoints are tried: the lite one first, because
+    its markup is the plainest and the least likely to change. Neither needs
+    JavaScript, which is what makes DuckDuckGo the source most likely to answer
+    a small server at all.
     """
-    url = 'https://html.duckduckgo.com/html/?q=' + quote_plus(with_exclusions(query))
     LOGGER.info('Searching DuckDuckGo: %s', query)
+    encoded = quote_plus(with_exclusions(query))
 
-    if not browser.goto(url):
-        return [], SearchOutcome.UNREACHABLE, ResultStats()
+    return _try_endpoints(
+        browser,
+        [f'https://lite.duckduckgo.com/lite/?q={encoded}',
+         f'https://html.duckduckgo.com/html/?q={encoded}'],
+        limit,
+        decode=_decode_ddg_url,
+        selectors=(
+            """
+            () => Array.from(document.querySelectorAll(
+                    'a.result-link, a.result__a, .result__title a, h2.result__title a'))
+                .map(a => ({href: a.href || '',
+                            title: (a.innerText || a.textContent || '').trim()}))
+            """,
+            # The lite layout is a bare table of links.
+            """
+            () => Array.from(document.querySelectorAll('table a[href]'))
+                .map(a => ({href: a.href || '',
+                            title: (a.innerText || a.textContent || '').trim()}))
+                .filter(x => x.title.length > 3)
+            """,
+        ),
+    )
 
-    anchors = _anchors(browser, """
-        () => Array.from(document.querySelectorAll(
-                'a.result__a, h2.result__title a, .result__title a'))
-            .map(a => ({href: a.href || '',
-                        title: (a.innerText || a.textContent || '').trim()}))
-    """)
-    return _finish_search(browser, anchors, limit, decode=_decode_ddg_url)
+
+def search_mojeek(browser: Browser, query: str,
+                  limit: int) -> tuple[list, str, ResultStats]:
+    """
+    Mojeek. An independent crawler with its own index.
+
+    It is small, it needs no JavaScript, and it does not rate-limit a modest
+    server the way the big engines do — which makes it the useful one when
+    everything else has shut us out.
+    """
+    LOGGER.info('Searching Mojeek: %s', query)
+    encoded = quote_plus(with_exclusions(query))
+
+    return _try_endpoints(
+        browser,
+        [f'https://www.mojeek.com/search?q={encoded}'],
+        limit,
+        decode=lambda href: href,          # Mojeek links straight to the site
+        selectors=(
+            """
+            () => Array.from(document.querySelectorAll(
+                    'ul.results-standard li h2 a, a.ob, .results a.title'))
+                .map(a => ({href: a.href || '',
+                            title: (a.innerText || a.textContent || '').trim()}))
+            """,
+        ),
+    )
 
 
 def search_bing(browser: Browser, query: str,
                 limit: int) -> tuple[list, str, ResultStats]:
     """
-    Bing. Second choice: usable, but rate limits a server quickly.
+    Bing. Usable, but it rate limits a server quickly.
 
     It does not wait on one class name any more. Bing served a perfectly good
-    results page whose markup did not match `li.b_algo h2 a`, and the timeout
+    results page whose markup did not match `li.b_algo h2 a`, and that timeout
     was reported as a block — so a working source was dropped.
     """
     LOGGER.info('Searching Bing: %s', query)
@@ -536,7 +606,11 @@ def search_bing(browser: Browser, query: str,
                         title: (a.innerText || a.textContent || '').trim()}))
         """,
     )
-    return _finish_search(browser, anchors, limit, decode=_decode_bing_url)
+    results, outcome, stats = _finish_search(browser, anchors, limit,
+                                             decode=_decode_bing_url)
+    if not results:
+        _save_debug_page(browser, url, outcome)
+    return results, outcome, stats
 
 
 def search_google(browser: Browser, query: str,
@@ -564,12 +638,45 @@ def search_google(browser: Browser, query: str,
             })
             .filter(x => x.href)
     """)
-    return _finish_search(browser, anchors, limit, decode=_decode_google_url)
+    results, outcome, stats = _finish_search(browser, anchors, limit,
+                                             decode=_decode_google_url)
+    if not results:
+        _save_debug_page(browser, url, outcome)
+    return results, outcome, stats
+
+
+def _save_debug_page(browser: Browser, url: str, outcome: str) -> None:
+    """
+    Save a page that gave us nothing, when SEARCH_DEBUG_DIR is set.
+
+    Guessing at markup from a distance is how a stale selector survives three
+    rounds of fixes. With the page on disk the cause is visible.
+    """
+    from django.conf import settings
+
+    directory = getattr(settings, 'SEARCH_DEBUG_DIR', '')
+    if not directory:
+        return
+
+    import pathlib as _pathlib
+    from datetime import datetime
+
+    try:
+        folder = _pathlib.Path(directory)
+        folder.mkdir(parents=True, exist_ok=True)
+        host = urlparse(url).netloc.replace('.', '-')
+        stamp = datetime.now().strftime('%H%M%S')
+        target = folder / f'{stamp}-{host}-{outcome}.html'
+        target.write_text(browser.html(), encoding='utf-8')
+        LOGGER.info('Saved the page that returned %s to %s', outcome, target)
+    except Exception as exc:
+        LOGGER.info('Could not save the debug page: %s', exc)
 
 
 # Tried in this order. The first one that returns results wins.
 SEARCH_SOURCES = (
     ('DuckDuckGo', search_duckduckgo),
+    ('Mojeek', search_mojeek),
     ('Bing', search_bing),
     ('Google', search_google),
 )
@@ -585,10 +692,34 @@ class SearchState:
     grinding on silently.
     """
     BLOCKS_BEFORE_GIVING_UP = 2
+    # A source can answer every time and still never yield a company — a stale
+    # selector looks exactly like that. After this many fruitless queries in a
+    # row, stop: grinding through forty more teaches the user nothing.
+    BARREN_QUERIES_BEFORE_GIVING_UP = 6
 
     def __init__(self):
         self.blocks: dict[str, int] = {}
         self.wins: dict[str, int] = {}
+        self.barren_run = 0
+        self.last_reason = ''
+
+    def note_query(self, produced_results: bool, reason: str = '') -> None:
+        """Record whether a whole query produced anything usable."""
+        if produced_results:
+            self.barren_run = 0
+        else:
+            self.barren_run += 1
+            self.last_reason = reason
+
+    @property
+    def nothing_is_working(self) -> bool:
+        """
+        True when query after query has come back with nothing at all.
+
+        This is the case the run used to miss: every source "answering" but
+        none returning a usable company.
+        """
+        return self.barren_run >= self.BARREN_QUERIES_BEFORE_GIVING_UP
 
     def live_sources(self):
         return [(name, fn) for name, fn in SEARCH_SOURCES
@@ -1009,6 +1140,24 @@ BLOCKED_EXPLANATION = (
     '  4. If it keeps happening, the server needs a different IP address.'
 )
 
+# Shown when the search engines answer but never return a company site. The
+# fix is different from being blocked, so the message has to be different too.
+BARREN_EXPLANATION = (
+    'The search engines answered, but no result was a company website, so '
+    'nothing could be collected.\n\n'
+    '{detail}\n\n'
+    '{leads} lead(s) already in your database are untouched.\n\n'
+    'What usually fixes it:\n'
+    '  1. Try a plainer search phrase — a product and a town, without the '
+    'words "company" or "contact address".\n'
+    '  2. Search one district at a time rather than a whole state.\n'
+    '  3. Import leads from a CSV file, which never uses a search engine.\n\n'
+    'If this keeps happening with every phrase, a search engine has probably '
+    'changed its page layout. Run "manage.py test_search --debug" and send the '
+    'saved page to your developer — it shows exactly what came back.'
+)
+
+
 def run_generation_job(job_id: int) -> None:
     """
     Execute one generation job from start to finish.
@@ -1094,6 +1243,12 @@ def run_generation_job(job_id: int) -> None:
                 # user cannot act on without being told what it is, so say it
                 # plainly and give them the fix.
                 _finish(job, 'FAILED', BLOCKED_EXPLANATION.format(
+                    detail=payload, leads=job.leads_found))
+                return
+            if kind == 'barren':
+                # The sources answered, but nothing usable came back. A
+                # different failure from being blocked, and a different fix.
+                _finish(job, 'FAILED', BARREN_EXPLANATION.format(
                     detail=payload, leads=job.leads_found))
                 return
             if kind == 'note':
@@ -1182,12 +1337,22 @@ def _crawl_thread(plans, max_websites, messages, stop_flag, pause_flag) -> None:
 
                 results, note = run_search(browser, plan.query,
                                            RESULTS_PER_QUERY, state)
+                state.note_query(bool(results), note)
+
                 if not results:
                     messages.put(('note', f'{note} — {plan.query[:70]}'))
                     # Once every source has shut us out, more queries only
                     # waste time. Stop and say why.
                     if state.all_blocked:
                         messages.put(('blocked', state.summary()))
+                        return
+                    # Or the sources answer but never yield a company. Same
+                    # outcome for the user, different cause — so say which.
+                    if state.nothing_is_working:
+                        messages.put((
+                            'barren',
+                            f'{state.BARREN_QUERIES_BEFORE_GIVING_UP} searches '
+                            f'in a row found nothing. Last one — {note}'))
                         return
                     continue
 

@@ -266,9 +266,28 @@ It will tell you which of three things is wrong:
 | *UNREACHABLE* | No outbound HTTPS or no DNS | Check the firewall: `curl -I https://html.duckduckgo.com/` |
 | *BLOCKED* | The engine is refusing this server — it shows the page it landed on, so you can confirm | See below |
 | *WORKED, but no result was a company site* | The engine answered fine; the results were directories or list pages | It prints how many links it saw and why each was dropped. Usually a narrower query fixes it. |
+| *the page answered but held no result links* | The engine's page layout has probably changed | Run with `--debug` and send the saved page to your developer |
 
-Add `--debug` to save each results page to a file, when the counts are not
-enough to explain what came back.
+`--debug` saves every page that returned nothing to `./search-debug/`, so the
+real markup can be looked at instead of guessed at. On a server, set
+`SEARCH_DEBUG_DIR=/srv/leadcrm/search-debug` to capture the same thing during
+a normal run.
+
+### Four sources, tried in order
+
+DuckDuckGo (two no-JavaScript endpoints), then Mojeek, then Bing, then Google.
+Each one falls back to reading every link in the results area, so a single
+stale CSS selector cannot turn a working engine into "empty". Mojeek runs its
+own index and does not rate-limit a modest server, which makes it the useful
+one once the big engines have shut you out.
+
+A run now stops in two situations rather than grinding on:
+
+* **Every source refused us** — the run fails immediately with the blocked
+  message above.
+* **The sources answer but six searches in a row find nothing** — the run stops
+  and says so. This usually means the search phrase is too specific, or an
+  engine changed its layout.
 
 To test extraction on one site, without searching at all:
 

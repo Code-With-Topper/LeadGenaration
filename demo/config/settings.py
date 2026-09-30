@@ -211,6 +211,11 @@ MIN_QUALITY_TO_CONTACT = int(os.environ.get('MIN_QUALITY_TO_CONTACT', 40))
 # Set these when Chrome and chromedriver are not on the default path, which is
 # the usual case on a VPS. Leave blank to let Selenium find them itself.
 CHROME_BINARY = os.environ.get('CHROME_BINARY', '')
+
+# When set to a folder, any search page that returned nothing is saved there.
+# Guessing at a search engine's markup from a distance is how a stale selector
+# survives several rounds of fixes; with the page on disk the cause is visible.
+SEARCH_DEBUG_DIR = os.environ.get('SEARCH_DEBUG_DIR', '')
 CHROMEDRIVER_PATH = os.environ.get('CHROMEDRIVER_PATH', '')
 
 # Start background work in a thread right after the user clicks, instead of

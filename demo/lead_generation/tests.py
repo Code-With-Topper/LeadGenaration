@@ -346,6 +346,9 @@ class SourceRobustnessTests(TestCase):
             def evaluate(self, script, default=None):
                 return []
 
+            def nudge(self):
+                pass
+
             def html(self):
                 return ''
 
@@ -371,6 +374,9 @@ class SourceRobustnessTests(TestCase):
 
             def evaluate(self, script, default=None):
                 return []
+
+            def nudge(self):
+                pass
 
             def html(self):
                 return ''
@@ -495,11 +501,40 @@ class BrowserIdentityTests(TestCase):
     The single biggest cause of lead generation finding nothing: Playwright's
     default announces HeadlessChrome and sets navigator.webdriver, and the
     search engines block that on sight.
+
+    The launch flags here come from the Selenium script that worked before
+    this project — they are the measures it had and this engine lacked.
     """
 
     def test_the_user_agent_is_not_headless(self):
         self.assertNotIn('Headless', engine.USER_AGENT)
         self.assertIn('Chrome/', engine.USER_AGENT)
+
+    def test_the_automation_flag_is_disabled(self):
+        """
+        --disable-blink-features=AutomationControlled is the flag that matters
+        most. Without it Chrome advertises itself as automation-controlled.
+        """
+        import inspect
+        source = inspect.getsource(engine.Browser.__enter__)
+        self.assertIn('--disable-blink-features=AutomationControlled', source)
+        self.assertIn("'ignore_default_args': ['--enable-automation']", source)
+
+    def test_a_slow_page_is_not_abandoned(self):
+        """
+        A company site whose last tracker script hangs still has its phone
+        number in the HTML. Throwing the page away on a timeout loses leads.
+        """
+        import inspect
+        source = inspect.getsource(engine.Browser.goto)
+        self.assertIn('window.stop()', source)
+        self.assertIn('using what loaded', source)
+
+    def test_results_are_read_after_scrolling(self):
+        """Search engines load results below the fold lazily."""
+        import inspect
+        self.assertIn('browser.nudge()', inspect.getsource(engine._anchors))
+        self.assertIn('scrollBy', inspect.getsource(engine.Browser.nudge))
 
 
 class CompanyNameFromPageTests(TestCase):

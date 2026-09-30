@@ -51,7 +51,10 @@ LOGGER = logging.getLogger('lead_generation')
 # --- pacing ---------------------------------------------------------------
 DELAY_MIN_SECONDS = 2.0
 DELAY_MAX_SECONDS = 5.0
-PAGE_LOAD_TIMEOUT = 35
+# A page that has not started arriving in this long is not going to. Your
+# earlier script used 12 seconds and worked; 20 is a compromise that still
+# tolerates a slow company website on a weak connection.
+PAGE_LOAD_TIMEOUT = 20
 # Kept short on purpose: when a search engine is blocking us there is nothing
 # to wait for, and a long wait multiplied by every query is how a run ends up
 # doing nothing for hours.
@@ -180,7 +183,18 @@ class Browser:
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--disable-notifications',
+                # The flag that matters most. Without it Chrome advertises
+                # itself as automation-controlled and the search engines
+                # refuse before a query is even read.
+                '--disable-blink-features=AutomationControlled',
+                '--disable-extensions',
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--window-size=1366,900',
             ],
+            # Chrome adds --enable-automation by default, which shows the
+            # "controlled by automated software" banner and is checked for.
+            'ignore_default_args': ['--enable-automation'],
         }
         binary = getattr(settings, 'CHROME_BINARY', '')
         if binary:
@@ -247,13 +261,31 @@ class Browser:
             return ''
 
     def goto(self, url: str) -> bool:
-        """Open a page. Returns False on a timeout or a dead host."""
+        """
+        Open a page.
+
+        A slow page is not a dead page. On a timeout we stop loading and work
+        with whatever arrived, because a company site whose last tracker script
+        hangs still has its phone number in the HTML. Only a page that gave us
+        nothing at all counts as a failure.
+        """
         try:
             self.page.goto(url, wait_until='domcontentloaded',
                            timeout=PAGE_LOAD_TIMEOUT * 1000)
             return True
         except Exception as exc:
-            LOGGER.info('Could not load %s: %s', url, str(exc).splitlines()[0])
+            reason = str(exc).splitlines()[0]
+
+            # Did anything arrive before it timed out?
+            try:
+                self.page.evaluate('() => window.stop()')
+            except Exception:
+                pass
+            if len(self.html()) > 500:
+                LOGGER.info('%s was slow; using what loaded.', url)
+                return True
+
+            LOGGER.info('Could not load %s: %s', url, reason)
             return False
 
     def text(self) -> str:
@@ -281,6 +313,20 @@ class Browser:
             return True
         except Exception:
             return False
+
+    def nudge(self) -> None:
+        """
+        Scroll down a little.
+
+        Search engines load results below the fold lazily, so reading the page
+        without scrolling can find an empty results container on a page that
+        actually has results.
+        """
+        try:
+            self.page.evaluate('() => window.scrollBy(0, 900)')
+            self.page.wait_for_timeout(400)
+        except Exception:
+            pass
 
 
 def polite_sleep():
@@ -451,6 +497,7 @@ def _anchors(browser: Browser, *selector_scripts) -> list:
     Try each specific extractor, then fall back to every link in the content
     area. Returns whatever the first one that finds anything gives.
     """
+    browser.nudge()
     for script in selector_scripts:
         anchors = browser.evaluate(script, default=[]) or []
         if anchors:

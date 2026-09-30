@@ -1,0 +1,399 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Lead Generation - Lead CRM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Lead Generation</h3>
+            <div class="d-flex align-items-center">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb m-0 p-0">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Lead Generation</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title mb-4">New Generation Job</h4>
+                    
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible bg-{{ message.tags }} text-white border-0 fade show" role="alert">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                    
+                    <form action="{% url 'lead_generation:index' %}" method="POST" onsubmit="if(this.dataset.submitted) return false; this.dataset.submitted=true;">
+                        {% csrf_token %}
+                        
+                        <h5 class="card-subtitle text-muted mb-3">1. Location & Industry Selection</h5>
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label for="state" class="form-label">State</label>
+                                <select class="form-select" id="state" name="state" required>
+                                    <option value="">[ Select State ▼ ]</option>
+                                    <option value="West Bengal">West Bengal</option>
+                                    <option value="Maharashtra">Maharashtra</option>
+                                    <option value="Karnataka">Karnataka</option>
+                                    <option value="Delhi">Delhi</option>
+                                    <option value="Gujarat">Gujarat</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="district" class="form-label">District</label>
+                                <select class="form-select" id="district" name="district" required>
+                                    <option value="">[ Select District ▼ ]</option>
+                                    <option value="Paschim Bardhaman">Paschim Bardhaman</option>
+                                    <option value="Kolkata">Kolkata</option>
+                                    <option value="Mumbai">Mumbai</option>
+                                    <option value="Pune">Pune</option>
+                                    <option value="Bangalore Urban">Bangalore Urban</option>
+                                    <option value="Ahmedabad">Ahmedabad</option>
+                                    <option value="New Delhi">New Delhi</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="city" class="form-label">City</label>
+                                <select class="form-select" id="city" name="city" required>
+                                    <option value="">[ Select City ▼ ]</option>
+                                    <option value="Durgapur">Durgapur</option>
+                                    <option value="Asansol">Asansol</option>
+                                    <option value="Kolkata">Kolkata</option>
+                                    <option value="Mumbai">Mumbai</option>
+                                    <option value="Pune">Pune</option>
+                                    <option value="Bangalore">Bangalore</option>
+                                    <option value="Ahmedabad">Ahmedabad</option>
+                                    <option value="New Delhi">New Delhi</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="industry" class="form-label">Industry</label>
+                                <select class="form-select" id="industry" name="industry" required>
+                                    <option value="">[ Select Industry ▼ ]</option>
+                                    <option value="Iron & Steel">Iron & Steel</option>
+                                    <option value="IT Services">IT Services</option>
+                                    <option value="Manufacturing">Manufacturing</option>
+                                    <option value="Healthcare">Healthcare</option>
+                                    <option value="Finance">Finance</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row mt-3">
+                            <div class="col-md-12 mb-3">
+                                <label for="keywords" class="form-label">Keywords</label>
+                                <select class="form-select" id="keywords" name="keywords" multiple style="height: 100px;" required>
+                                    <option value="Steel Manufacturer" selected>[ Steel Manufacturer ]</option>
+                                    <option value="Steel Plant" selected>[ Steel Plant ]</option>
+                                    <option value="Rolling Mill" selected>[ Rolling Mill ]</option>
+                                </select>
+                                <small class="form-text text-muted">Hold CTRL to select multiple keywords.</small>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+                        
+                        <h5 class="card-subtitle text-muted mb-3">2. Run Mode</h5>
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="radio" name="run_mode" id="mode1" value="until_stopped" checked>
+                                    <label class="form-check-label" for="mode1">
+                                        Run until stopped
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="radio" name="run_mode" id="mode2" value="duration">
+                                    <label class="form-check-label" for="mode2">
+                                        Run for selected duration
+                                    </label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="radio" name="run_mode" id="mode3" value="queue_completed">
+                                    <label class="form-check-label" for="mode3">
+                                        Run until selected search/location queue is completed
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <h5 class="card-subtitle text-muted mb-3">3. Browser Options</h5>
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="is_headless" name="is_headless" checked>
+                                    <label class="form-check-label" for="is_headless">
+                                        <strong>Run in Background (Headless Mode)</strong>
+                                        <br><small class="text-muted">Runs the scraper silently in the background without opening a visible Chrome window. Check this to bypass popups and run cleanly on servers.</small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+
+                        <h5 class="card-subtitle text-muted mb-3">4. Job Controls</h5>
+                        <div class="d-flex gap-2">
+                                <button type="submit" name="action" value="start" class="btn btn-success waves-effect waves-light"><i class="fa fa-play me-1"></i> START GENERATION</button>
+                                <button type="submit" name="action" value="pause" class="btn btn-warning waves-effect waves-light text-white" formnovalidate><i class="fa fa-pause me-1"></i> PAUSE</button>
+                                <button type="submit" name="action" value="resume" class="btn btn-info waves-effect waves-light text-white" formnovalidate><i class="fa fa-play-circle me-1"></i> RESUME</button>
+                                <button type="submit" name="action" value="stop" class="btn btn-danger waves-effect waves-light" formnovalidate><i class="fa fa-stop me-1"></i> STOP</button>
+                        </div>
+                        
+                        {% if not active_job %}
+                            <div class="mt-3 text-muted">
+                                <i class="fas fa-info-circle text-primary"></i> Ready to generate leads. Configure your search and click Start Generation to begin.
+                            </div>
+                        {% endif %}
+
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    {% if previous_jobs %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-secondary mb-3">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0 text-dark"><i class="fas fa-history me-2"></i> Previous Generation Jobs</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Job ID</th>
+                                    <th>Location</th>
+                                    <th>Industry</th>
+                                    <th>Status</th>
+                                    <th>Valid Leads</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for job in previous_jobs %}
+                                <tr>
+                                    <td>#{{ job.id }}</td>
+                                    <td>{{ job.city }}, {{ job.state }}</td>
+                                    <td>{{ job.industry }}</td>
+                                    <td>
+                                        {% if job.status == 'COMPLETED' %}
+                                            <span class="badge bg-success">COMPLETED</span>
+                                        {% elif job.status == 'STOPPED' %}
+                                            <span class="badge bg-danger">STOPPED</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ job.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ job.valid_leads }}</td>
+                                    <td>{{ job.created_at|date:"d M Y" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- LIVE PANEL -->
+    <div class="row mt-4" id="live-panel-container">
+        <div class="col-12">
+            <div class="card border-primary mb-3">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 text-white"><i class="fas fa-broadcast-tower me-2"></i> LIVE GENERATED LEADS</h5>
+                    <span id="live-status-badge" class="badge bg-light text-primary">● RUNNING</span>
+                </div>
+                <div class="card-body">
+                    
+                    <!-- Counters -->
+                    <div class="row text-center mb-4 border-bottom pb-3">
+                        <div class="col-md-2 col-4 mb-2">
+                            <h6 class="text-muted mb-1">Websites</h6>
+                            <h3 class="mb-0 text-info" id="count-websites">0</h3>
+                        </div>
+                        <div class="col-md-2 col-4 mb-2">
+                            <h6 class="text-muted mb-1">Companies</h6>
+                            <h3 class="mb-0 text-primary" id="count-companies">0</h3>
+                        </div>
+                        <div class="col-md-2 col-4 mb-2">
+                            <h6 class="text-muted mb-1">Valid</h6>
+                            <h3 class="mb-0 text-success" id="count-valid">0</h3>
+                        </div>
+                        <div class="col-md-2 col-4 mb-2">
+                            <h6 class="text-muted mb-1">Verify</h6>
+                            <h3 class="mb-0 text-warning" id="count-verify">0</h3>
+                        </div>
+                        <div class="col-md-2 col-4 mb-2">
+                            <h6 class="text-muted mb-1">Duplicates</h6>
+                            <h3 class="mb-0 text-secondary" id="count-duplicates">0</h3>
+                        </div>
+                        <div class="col-md-2 col-4 mb-2">
+                            <h6 class="text-muted mb-1">Errors/Invalid</h6>
+                            <h3 class="mb-0 text-danger" id="count-errors">0</h3>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="text-muted mb-0">Latest Generated Leads</h6>
+                        <small class="text-muted" id="live-current-query"></small>
+                    </div>
+                    
+                    <div id="live-error-message" class="alert alert-danger d-none mb-3"></div>
+
+                    <!-- Leads Container -->
+                    <div id="live-leads-list" style="max-height: 600px; overflow-y: auto; padding-right: 10px;">
+                        <!-- Lead cards will be injected here -->
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        let isPolling = false;
+        let pollInterval;
+        let knownLeadIds = new Set();
+        let currentJobId = null;
+        
+        function fetchLiveData() {
+            let fetchUrl = "{% url 'lead_generation:live_data' %}";
+            if (currentJobId) {
+                fetchUrl += "?job_id=" + currentJobId;
+            }
+            
+            fetch(fetchUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        currentJobId = data.job.id;
+                        document.getElementById('live-panel-container').style.display = 'flex';
+                        
+                        // Update Counters
+                        document.getElementById('count-websites').textContent = data.job.websites_found;
+                        document.getElementById('count-companies').textContent = data.job.companies_found;
+                        document.getElementById('count-valid').textContent = data.job.valid_leads;
+                        document.getElementById('count-verify').textContent = data.job.needs_review;
+                        document.getElementById('count-duplicates').textContent = data.job.duplicate_leads;
+                        document.getElementById('count-errors').textContent = data.job.invalid_leads;
+                        
+                        document.getElementById('live-current-query').textContent = data.job.current_query ? "Searching: " + data.job.current_query : "";
+                        
+                        const statusBadge = document.getElementById('live-status-badge');
+                        statusBadge.textContent = "● " + data.job.status;
+                        
+                        const errorPanel = document.getElementById('live-error-message');
+                        if (data.job.error_message) {
+                            errorPanel.textContent = "Error: " + data.job.error_message;
+                            errorPanel.classList.remove('d-none');
+                        } else {
+                            errorPanel.classList.add('d-none');
+                        }
+                        
+                        if (data.job.status === 'COMPLETED' || data.job.status === 'STOPPED' || data.job.status === 'FAILED') {
+                            if(isPolling) {
+                                clearInterval(pollInterval);
+                                isPolling = false;
+                            }
+                        } else {
+                            if(!isPolling) {
+                                pollInterval = setInterval(fetchLiveData, 3000);
+                                isPolling = true;
+                            }
+                        }
+                        
+                        // Update Leads list
+                        const listContainer = document.getElementById('live-leads-list');
+                        let needsReflow = false;
+                        
+                        data.leads.reverse().forEach(lead => {
+                            if (!knownLeadIds.has(lead.id)) {
+                                knownLeadIds.add(lead.id);
+                                needsReflow = true;
+                                
+                                let statusClass = 'bg-secondary';
+                                let statusText = 'PROCESSING';
+                                if(lead.status === 'NEW' && lead.data_verified) {
+                                    statusClass = 'bg-success';
+                                    statusText = '✓ VERIFIED';
+                                } else if (lead.status === 'NEW' && !lead.data_verified) {
+                                    statusClass = 'bg-warning text-dark';
+                                    statusText = '⚠ NEEDS VERIFY';
+                                } else if (lead.status === 'INVALID') {
+                                    statusClass = 'bg-danger';
+                                    statusText = '✗ INVALID';
+                                }
+                                
+                                const leadHtml = `
+                                    <div class="card border mb-2 shadow-sm">
+                                        <div class="card-body py-3">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <h5 class="mb-1 text-dark">${lead.company_name} <span class="badge ${statusClass} ms-2" style="font-size: 0.75rem;">${statusText}</span></h5>
+                                                    <p class="text-muted mb-2 text-sm">${lead.industry} | <i class="fas fa-map-marker-alt text-danger"></i> ${lead.city}, ${lead.state}</p>
+                                                    <div class="d-flex gap-3 text-sm">
+                                                        <span class="text-dark"><i class="fas fa-phone text-muted"></i> ${lead.phone}</span>
+                                                        <span class="text-dark"><i class="fas fa-envelope text-muted"></i> ${lead.email}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="d-flex flex-column gap-2 text-end">
+                                                    <a href="/leads/companies/?search=${encodeURIComponent(lead.company_name)}" class="btn btn-sm btn-outline-primary" target="_blank">View Lead</a>
+                                                    ${lead.website ? `<a href="${lead.website}" class="btn btn-sm btn-outline-secondary" target="_blank">Website</a>` : ''}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                listContainer.insertAdjacentHTML('afterbegin', leadHtml);
+                            }
+                        });
+                        
+                    } else if (data.status === 'no_job') {
+                        document.getElementById('live-panel-container').style.display = 'flex';
+                        document.getElementById('live-status-badge').textContent = 'READY TO START';
+                        document.getElementById('live-status-badge').className = 'badge bg-light text-dark';
+                        document.getElementById('live-current-query').textContent = 'No generation is currently running. Configure your search and click Start Generation to begin.';
+                        
+                        document.getElementById('count-websites').textContent = '0';
+                        document.getElementById('count-companies').textContent = '0';
+                        document.getElementById('count-valid').textContent = '0';
+                        document.getElementById('count-verify').textContent = '0';
+                        document.getElementById('count-duplicates').textContent = '0';
+                        document.getElementById('count-errors').textContent = '0';
+                        
+                        if(isPolling) {
+                            clearInterval(pollInterval);
+                            isPolling = false;
+                        }
+                    }
+                })
+                .catch(err => console.error("Live panel fetch error:", err));
+        }
+        
+        // Initial fetch and poll setup
+        fetchLiveData();
+    });
+    </script>
+
+</div>
+{% endblock %}

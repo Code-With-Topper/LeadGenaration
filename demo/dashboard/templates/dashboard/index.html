@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Dashboard - Lead CRM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Welcome to Lead CRM</h3>
+            <div class="d-flex align-items-center">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb m-0 p-0">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Top KPI Cards -->
+    <div class="row mt-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div>
+                            <div class="d-inline-flex align-items-center">
+                                <h2 class="text-white mb-1 font-weight-medium">{{ total_leads }}</h2>
+                            </div>
+                            <h6 class="text-white-50 font-weight-normal mb-0 w-100 text-truncate">Total Leads</h6>
+                        </div>
+                        <div class="ms-auto mt-md-3 mt-lg-0">
+                            <span class="opacity-7 text-white"><i data-feather="users" class="feather-xl"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div>
+                            <div class="d-inline-flex align-items-center">
+                                <h2 class="text-white mb-1 font-weight-medium">{{ valid_leads }}</h2>
+                            </div>
+                            <h6 class="text-white-50 font-weight-normal mb-0 w-100 text-truncate">Valid Leads</h6>
+                        </div>
+                        <div class="ms-auto mt-md-3 mt-lg-0">
+                            <span class="opacity-7 text-white"><i data-feather="check-circle" class="feather-xl"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div>
+                            <div class="d-inline-flex align-items-center">
+                                <h2 class="text-white mb-1 font-weight-medium">{{ incomplete_leads }}</h2>
+                            </div>
+                            <h6 class="text-white-50 font-weight-normal mb-0 w-100 text-truncate">Incomplete Leads</h6>
+                        </div>
+                        <div class="ms-auto mt-md-3 mt-lg-0">
+                            <span class="opacity-7 text-white"><i data-feather="alert-circle" class="feather-xl"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div>
+                            <div class="d-inline-flex align-items-center">
+                                <h2 class="text-white mb-1 font-weight-medium">{{ duplicates }}</h2>
+                            </div>
+                            <h6 class="text-white-50 font-weight-normal mb-0 w-100 text-truncate">Duplicates</h6>
+                        </div>
+                        <div class="ms-auto mt-md-3 mt-lg-0">
+                            <span class="opacity-7 text-white"><i data-feather="copy" class="feather-xl"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Action Cards -->
+    <div class="row mt-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="card border-end">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div>
+                            <div class="d-inline-flex align-items-center">
+                                <h2 class="text-dark mb-1 font-weight-medium">{{ emails_sent }}</h2>
+                            </div>
+                            <h6 class="text-muted font-weight-normal mb-0 w-100 text-truncate">Emails Sent</h6>
+                        </div>
+                        <div class="ms-auto mt-md-3 mt-lg-0">
+                            <span class="opacity-7 text-primary"><i data-feather="mail" class="feather-xl"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card border-end">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div>
+                            <div class="d-inline-flex align-items-center">
+                                <h2 class="text-dark mb-1 font-weight-medium">{{ followups }}</h2>
+                            </div>
+                            <h6 class="text-muted font-weight-normal mb-0 w-100 text-truncate">Follow-ups</h6>
+                        </div>
+                        <div class="ms-auto mt-md-3 mt-lg-0">
+                            <span class="opacity-7 text-warning"><i data-feather="calendar" class="feather-xl"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card border-end">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div>
+                            <div class="d-inline-flex align-items-center">
+                                <h2 class="text-dark mb-1 font-weight-medium">{{ quotations }}</h2>
+                            </div>
+                            <h6 class="text-muted font-weight-normal mb-0 w-100 text-truncate">Quotations</h6>
+                        </div>
+                        <div class="ms-auto mt-md-3 mt-lg-0">
+                            <span class="opacity-7 text-info"><i data-feather="file-text" class="feather-xl"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div>
+                            <div class="d-inline-flex align-items-center">
+                                <h2 class="text-dark mb-1 font-weight-medium">{{ converted }}</h2>
+                            </div>
+                            <h6 class="text-muted font-weight-normal mb-0 w-100 text-truncate">Converted Leads</h6>
+                        </div>
+                        <div class="ms-auto mt-md-3 mt-lg-0">
+                            <span class="opacity-7 text-success"><i data-feather="award" class="feather-xl"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Charts and Tables -->
+    <div class="row mt-4">
+        <div class="col-lg-8 col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Lead Acquisition Trend</h4>
+                    <div class="mt-4 position-relative" style="height:294px;">
+                        <canvas id="leadsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Lead Quality</h4>
+                    <div class="mt-4 pb-3" style="height:294px;">
+                        <canvas id="qualityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Use Chart.js since it's easy to add -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Line chart for trends
+        const ctx = document.getElementById('leadsChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+                datasets: [{
+                    label: 'New Leads',
+                    data: [12, 19, 3, 5, 2, 3, {{ total_leads }}],
+                    borderColor: '#5f76e8',
+                    backgroundColor: 'rgba(95, 118, 232, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+
+        // Doughnut chart for quality
+        const ctx2 = document.getElementById('qualityChart').getContext('2d');
+        new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: ['Valid', 'Incomplete', 'Duplicates'],
+                datasets: [{
+                    data: [{{ valid_leads }}, {{ incomplete_leads }}, {{ duplicates }}],
+                    backgroundColor: ['#22ca80', '#ff4f70', '#01caf1'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '75%',
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Leads - Lead CRM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Import Leads</h3>
+            <div class="d-flex align-items-center mb-4">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb m-0 p-0">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Imports</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Upload File</h4>
+                    <p class="text-muted font-14">Upload a CSV or Excel (.xlsx) file containing your leads.</p>
+                    
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                    
+                    <form action="{% url 'imports:upload' %}" method="POST" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <input class="form-control" type="file" name="file" accept=".csv, .xlsx" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100"><i class="fa fa-upload me-1"></i> Upload & Map Columns</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h4 class="card-title">Export Data</h4>
+                    <p class="text-muted font-14">Download your CRM data to Excel.</p>
+                    <a href="{% url 'leads:export_leads' %}" class="btn btn-success w-100"><i class="fa fa-download me-1"></i> Export All Leads (.xlsx)</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Recent Import Jobs</h4>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>File Name</th>
+                                    <th>Date</th>
+                                    <th>Status</th>
+                                    <th>Imported</th>
+                                    <th>Failed</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for job in jobs %}
+                                <tr>
+                                    <td>{{ job.file_name }}</td>
+                                    <td>{{ job.created_at|date:"M d, H:i" }}</td>
+                                    <td>
+                                        <span class="badge bg-{% if job.status == 'COMPLETED' %}success{% elif job.status == 'FAILED' %}danger{% else %}warning{% endif %}">
+                                            {{ job.status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ job.imported_rows }}</td>
+                                    <td>{{ job.failed_rows }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-4">No import jobs found.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

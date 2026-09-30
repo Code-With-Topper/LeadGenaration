@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Unsubscribed</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 100px; color: #333; }
+        .container { max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if messages %}
+            {% for message in messages %}
+                <h3 class="{% if message.tags == 'success' %}success{% else %}error{% endif %}">{{ message }}</h3>
+            {% endfor %}
+        {% else %}
+            <h3>Unsubscribe Request Processed</h3>
+        {% endif %}
+        <p>You have been removed from our mailing list and will not receive further automated communications.</p>
+    </div>
+</body>
+</html>

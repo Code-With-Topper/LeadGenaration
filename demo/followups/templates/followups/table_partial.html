@@ -1,0 +1,44 @@
+
+<div class="table-responsive">
+    <table class="table table-hover table-striped mb-0">
+        <thead class="bg-light">
+            <tr>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Company</th>
+                <th>Type</th>
+                <th>Notes</th>
+                {% if is_completed %}
+                <th>Completed At</th>
+                {% else %}
+                <th>Action</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for fu in followups %}
+            <tr>
+                <td>{{ fu.follow_up_date|date:"M d, Y" }}</td>
+                <td>{{ fu.follow_up_time|time:"H:i" }}</td>
+                <td><a href="{% url 'leads:detail' fu.lead.id %}">{{ fu.lead.company_name }}</a></td>
+                <td><span class="badge bg-primary">{{ fu.get_follow_up_type_display }}</span></td>
+                <td>{{ fu.notes|truncatechars:30 }}</td>
+                {% if is_completed %}
+                <td>{{ fu.updated_at|date:"M d, Y H:i" }}</td>
+                {% else %}
+                <td>
+                    <form action="{% url 'followups:complete_followup' fu.id %}" method="POST" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success btn-sm"><i data-feather="check"></i></button>
+                    </form>
+                </td>
+                {% endif %}
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="text-center text-muted">No follow-ups found in this category.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

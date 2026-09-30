@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block title %}Follow-ups - Lead CRM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Follow-ups Dashboard</h3>
+            <div class="d-flex align-items-center mb-4">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb m-0 p-0">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Follow-ups</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+            
+            <ul class="nav nav-tabs nav-bordered mb-3">
+                <li class="nav-item">
+                    <a href="#today" data-bs-toggle="tab" aria-expanded="true" class="nav-link active">
+                        <span class="d-none d-md-block">Today's Follow-ups <span class="badge bg-primary ms-1">{{ today_followups.count }}</span></span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#overdue" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
+                        <span class="d-none d-md-block">Overdue <span class="badge bg-danger ms-1">{{ overdue_followups.count }}</span></span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#upcoming" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
+                        <span class="d-none d-md-block">Upcoming <span class="badge bg-info ms-1">{{ upcoming_followups.count }}</span></span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#completed" data-bs-toggle="tab" aria-expanded="false" class="nav-link">
+                        <span class="d-none d-md-block">Completed</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="tab-content">
+                
+                <!-- Macro for rendering table -->
+                
+                
+                <!-- Today -->
+                <div class="tab-pane show active" id="today">
+                    <div class="card"><div class="card-body">
+                        {% include 'followups/_table.html' with followups=today_followups is_completed=False %}
+                    </div></div>
+                </div>
+                
+                <!-- Overdue -->
+                <div class="tab-pane" id="overdue">
+                    <div class="card"><div class="card-body">
+                        {% include 'followups/_table.html' with followups=overdue_followups is_completed=False %}
+                    </div></div>
+                </div>
+                
+                <!-- Upcoming -->
+                <div class="tab-pane" id="upcoming">
+                    <div class="card"><div class="card-body">
+                        {% include 'followups/_table.html' with followups=upcoming_followups is_completed=False %}
+                    </div></div>
+                </div>
+                
+                <!-- Completed -->
+                <div class="tab-pane" id="completed">
+                    <div class="card"><div class="card-body">
+                        {% include 'followups/_table.html' with followups=completed_followups is_completed=True %}
+                    </div></div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

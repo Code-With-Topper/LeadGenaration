@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}All Leads - Lead CRM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">All Leads</h3>
+            <div class="d-flex align-items-center mb-4">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb m-0 p-0">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">All Leads</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped mb-0">
+                            <thead class="bg-primary text-white">
+                                <tr>
+                                    <th scope="col">Company</th>
+                                    <th scope="col">Industry</th>
+                                    <th scope="col">City</th>
+                                    <th scope="col">Email</th>
+                                    <th scope="col">Phone</th>
+                                    <th scope="col">Completeness</th>
+                                    <th scope="col">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for lead in leads %}
+                                <tr onclick="window.location='{% url 'leads:detail' lead.id %}';" style="cursor: pointer;">
+                                    <td class="font-weight-medium text-dark">{{ lead.company.company_name }}</td>
+                                    <td>{{ lead.company.industry }}</td>
+                                    <td>
+                                        {% if lead.company.plants.first %}
+                                            {{ lead.company.plants.first.city }}
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ lead.company.company_email|default:"<span class='text-muted'>NOT FOUND</span>"|safe }}</td>
+                                    <td>{{ lead.company.company_phone|default:"<span class='text-muted'>NOT FOUND</span>"|safe }}</td>
+                                    <td>
+                                        <div class="progress" style="height: 10px; margin-top: 5px;">
+                                            <div class="progress-bar {% if lead.completeness_percentage >= 80 %}bg-success{% elif lead.completeness_percentage >= 50 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ lead.completeness_percentage }}%;" aria-valuenow="{{ lead.completeness_percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                        </div>
+                                        <small class="text-muted">{{ lead.completeness_percentage }}%</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if lead.status == 'NEW' %}bg-primary{% elif lead.status == 'CONVERTED' %}bg-success{% else %}bg-secondary{% endif %}">
+                                            {{ lead.status }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center py-4">
+                                        <h5 class="text-muted">No leads found. Go to Lead Generation to start scraping!</h5>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

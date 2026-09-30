@@ -1,0 +1,245 @@
+{% extends 'base.html' %}
+
+{% block title %}Analytics & Reports - Lead CRM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Analytics Dashboard</h3>
+            <div class="d-flex align-items-center mb-4">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb m-0 p-0">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Reports</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 1. Lead Report & 5. Email Report -->
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h4 class="card-title text-white mb-4">Lead Overview</h4>
+                    <div class="row text-center">
+                        <div class="col-6 col-md-3 mb-3">
+                            <h2 class="text-white font-weight-medium">{{ lead_stats.total }}</h2>
+                            <span class="opacity-7 text-uppercase font-12">Total Leads</span>
+                        </div>
+                        <div class="col-6 col-md-3 mb-3">
+                            <h2 class="text-white font-weight-medium">{{ lead_stats.valid }}</h2>
+                            <span class="opacity-7 text-uppercase font-12">Valid</span>
+                        </div>
+                        <div class="col-6 col-md-3 mb-3">
+                            <h2 class="text-white font-weight-medium">{{ lead_stats.incomplete }}</h2>
+                            <span class="opacity-7 text-uppercase font-12">Incomplete</span>
+                        </div>
+                        <div class="col-6 col-md-3 mb-3">
+                            <h2 class="text-white font-weight-medium">{{ lead_stats.duplicates }}</h2>
+                            <span class="opacity-7 text-uppercase font-12">Duplicates</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h4 class="card-title text-white mb-4">Email Performance</h4>
+                    <div class="row text-center">
+                        <div class="col-4 col-md-2 mb-3">
+                            <h3 class="text-white font-weight-medium">{{ email_stats.campaigns }}</h3>
+                            <span class="opacity-7 text-uppercase font-10">Campaigns</span>
+                        </div>
+                        <div class="col-4 col-md-2 mb-3">
+                            <h3 class="text-white font-weight-medium">{{ email_stats.manual }}</h3>
+                            <span class="opacity-7 text-uppercase font-10">Manual</span>
+                        </div>
+                        <div class="col-4 col-md-2 mb-3">
+                            <h3 class="text-white font-weight-medium">{{ email_stats.auto }}</h3>
+                            <span class="opacity-7 text-uppercase font-10">Automated</span>
+                        </div>
+                        <div class="col-6 col-md-3 mb-3 border-start border-light">
+                            <h3 class="text-white font-weight-medium">{{ email_stats.sent }}</h3>
+                            <span class="opacity-7 text-uppercase font-10">Total Sent</span>
+                        </div>
+                        <div class="col-6 col-md-3 mb-3">
+                            <h3 class="text-white font-weight-medium">{{ email_stats.failed }}</h3>
+                            <span class="opacity-7 text-uppercase font-10">Failed</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- 4. CRM Pipeline -->
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">CRM Pipeline Funnel</h4>
+                    <div class="mt-4">
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>New</span>
+                            <span class="font-weight-medium">{{ crm_stats.NEW }}</span>
+                        </div>
+                        <div class="progress mb-3" style="height: 10px;">
+                            <div class="progress-bar bg-info" style="width: {% widthratio crm_stats.NEW lead_stats.total|default:1 100 %}%"></div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Contacted</span>
+                            <span class="font-weight-medium">{{ crm_stats.CONTACTED }}</span>
+                        </div>
+                        <div class="progress mb-3" style="height: 10px;">
+                            <div class="progress-bar bg-warning" style="width: {% widthratio crm_stats.CONTACTED lead_stats.total|default:1 100 %}%"></div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Requirement Received</span>
+                            <span class="font-weight-medium">{{ crm_stats.REQUIREMENT_RECEIVED }}</span>
+                        </div>
+                        <div class="progress mb-3" style="height: 10px;">
+                            <div class="progress-bar bg-primary" style="width: {% widthratio crm_stats.REQUIREMENT_RECEIVED lead_stats.total|default:1 100 %}%"></div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Quotation Sent</span>
+                            <span class="font-weight-medium">{{ crm_stats.QUOTATION_SENT }}</span>
+                        </div>
+                        <div class="progress mb-3" style="height: 10px;">
+                            <div class="progress-bar bg-cyan" style="width: {% widthratio crm_stats.QUOTATION_SENT lead_stats.total|default:1 100 %}%"></div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Negotiation</span>
+                            <span class="font-weight-medium">{{ crm_stats.NEGOTIATION }}</span>
+                        </div>
+                        <div class="progress mb-3" style="height: 10px;">
+                            <div class="progress-bar bg-purple" style="width: {% widthratio crm_stats.NEGOTIATION lead_stats.total|default:1 100 %}%"></div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mb-2">
+                            <span>Converted</span>
+                            <span class="font-weight-medium">{{ crm_stats.CONVERTED }}</span>
+                        </div>
+                        <div class="progress mb-3" style="height: 10px;">
+                            <div class="progress-bar bg-success" style="width: {% widthratio crm_stats.CONVERTED lead_stats.total|default:1 100 %}%"></div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-danger">Lost / Rejected / Invalid</span>
+                            <span class="font-weight-medium text-danger">{{ crm_stats.LOST }}</span>
+                        </div>
+                        <div class="progress mb-3" style="height: 10px;">
+                            <div class="progress-bar bg-danger" style="width: {% widthratio crm_stats.LOST lead_stats.total|default:1 100 %}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- 2. Industry -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Top Industries</h4>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Industry</th>
+                                    <th class="text-end">Leads</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ind in industry_data|slice:":10" %}
+                                <tr>
+                                    <td>{{ ind.industry }}</td>
+                                    <td class="text-end font-weight-medium">{{ ind.count }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted">No industry data available.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 3. Location -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">Top Locations (States/Cities)</h4>
+                    
+                    <ul class="nav nav-tabs nav-bordered mb-3">
+                        <li class="nav-item">
+                            <a href="#states" data-bs-toggle="tab" aria-expanded="true" class="nav-link active">States</a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#cities" data-bs-toggle="tab" aria-expanded="false" class="nav-link">Cities</a>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content">
+                        <div class="tab-pane show active" id="states">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>State</th>
+                                            <th class="text-end">Leads</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for st in state_data|slice:":10" %}
+                                        <tr>
+                                            <td>{{ st.state }}</td>
+                                            <td class="text-end font-weight-medium">{{ st.count }}</td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr><td colspan="2" class="text-center text-muted">No state data.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="tab-pane" id="cities">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>City</th>
+                                            <th class="text-end">Leads</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for ct in city_data|slice:":10" %}
+                                        <tr>
+                                            <td>{{ ct.city }}</td>
+                                            <td class="text-end font-weight-medium">{{ ct.count }}</td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr><td colspan="2" class="text-center text-muted">No city data.</td></tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

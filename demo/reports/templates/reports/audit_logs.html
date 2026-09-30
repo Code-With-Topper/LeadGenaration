@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}Audit Logs - Lead CRM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Audit Logs</h3>
+            <div class="d-flex align-items-center mb-4">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb m-0 p-0">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{% url 'reports:dashboard' %}">Reports</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Audit Logs</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="card-title">System Activity</h4>
+                    <p class="text-muted font-14">Showing the last 500 actions performed in the CRM.</p>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm text-nowrap">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th>Date/Time</th>
+                                    <th>User</th>
+                                    <th>Action</th>
+                                    <th>Object</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in logs %}
+                                <tr>
+                                    <td>{{ log.created_at|date:"M d, Y H:i:s" }}</td>
+                                    <td>
+                                        {% if log.performed_by %}
+                                        <span class="badge bg-primary rounded-pill">{{ log.performed_by.username }}</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary rounded-pill">System</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><strong>{{ log.action }}</strong></td>
+                                    <td>{{ log.model_name }} (#{{ log.object_id }})</td>
+                                    <td class="text-wrap" style="max-width: 300px;">
+                                        <small class="text-muted">{{ log.changes|default:"-"|truncatechars:100 }}</small>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-4">No audit logs recorded yet.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

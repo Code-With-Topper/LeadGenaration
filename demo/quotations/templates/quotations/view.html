@@ -1,0 +1,141 @@
+{% extends 'base.html' %}
+
+{% block title %}View Quotation - {{ quotation.quotation_number }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Quotation {{ quotation.quotation_number }}</h3>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb m-0 p-0">
+                            <li class="breadcrumb-item"><a href="{% url 'quotations:quotation_list' %}">Quotations</a></li>
+                            <li class="breadcrumb-item active" aria-current="page">{{ quotation.quotation_number }}</li>
+                        </ol>
+                    </nav>
+                </div>
+                <div>
+                    <a href="{% url 'quotations:generate_pdf' quotation.id %}" class="btn btn-danger"><i class="fa fa-file-pdf me-1"></i> Download PDF</a>
+                    <form action="{% url 'quotations:send_quotation' quotation.id %}" method="POST" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-primary"><i class="fa fa-envelope me-1"></i> Email to Client</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+            
+            <div class="card">
+                <div class="card-body">
+                    <div class="row mb-4">
+                        <div class="col-sm-6">
+                            <h5 class="mb-3">From:</h5>
+                            <h3 class="text-dark mb-1">Our Company</h3>
+                            <div>123 Business Rd</div>
+                            <div>City, State 12345</div>
+                            <div>Email: sales@example.com</div>
+                        </div>
+                        <div class="col-sm-6 text-sm-end">
+                            <h5 class="mb-3">To:</h5>
+                            <h3 class="text-dark mb-1"><a href="{% url 'leads:detail' quotation.lead.id %}">{{ quotation.company.company_name }}</a></h3>
+                            {% if quotation.contact %}
+                            <div>Attn: {{ quotation.contact.name }}</div>
+                            {% endif %}
+                            <div>{{ quotation.company.company_email|default:"" }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-sm-6">
+                            <div><strong>Quotation Date:</strong> {{ quotation.date|date:"M d, Y" }}</div>
+                            {% if quotation.valid_until %}
+                            <div><strong>Valid Until:</strong> {{ quotation.valid_until|date:"M d, Y" }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-sm-6 text-sm-end">
+                            <div><strong>Status:</strong> <span class="badge bg-info">{{ quotation.status }}</span></div>
+                        </div>
+                    </div>
+                    
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th>Description</th>
+                                    <th>Quantity</th>
+                                    <th>Rate</th>
+                                    <th>Tax (%)</th>
+                                    <th>Discount</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in quotation.items.all %}
+                                <tr>
+                                    <td>{{ item.description }}</td>
+                                    <td>{{ item.quantity }}</td>
+                                    <td>${{ item.rate }}</td>
+                                    <td>{{ item.tax_percentage }}%</td>
+                                    <td>${{ item.discount_amount }}</td>
+                                    <td>${{ item.total_price }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="row mt-4">
+                        <div class="col-sm-7">
+                            {% if quotation.terms %}
+                            <div class="mb-3">
+                                <strong>Terms & Conditions:</strong>
+                                <p class="text-muted">{{ quotation.terms|linebreaks }}</p>
+                            </div>
+                            {% endif %}
+                            {% if quotation.notes %}
+                            <div>
+                                <strong>Notes:</strong>
+                                <p class="text-muted">{{ quotation.notes|linebreaks }}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-sm-5">
+                            <table class="table table-sm table-borderless text-end">
+                                <tr>
+                                    <td><strong>Subtotal:</strong></td>
+                                    <td>${{ quotation.subtotal }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Discount:</strong></td>
+                                    <td class="text-danger">-${{ quotation.discount_total }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Tax:</strong></td>
+                                    <td>+${{ quotation.tax_total }}</td>
+                                </tr>
+                                <tr>
+                                    <td><h4 class="text-dark"><strong>Grand Total:</strong></h4></td>
+                                    <td><h4 class="text-dark"><strong>${{ quotation.total_amount }}</strong></h4></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

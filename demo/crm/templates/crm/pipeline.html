@@ -1,0 +1,251 @@
+{% extends 'base.html' %}
+
+{% block title %}Sales Pipeline - Lead CRM{% endblock %}
+
+{% block content %}
+<style>
+    .kanban-board {
+        display: flex;
+        overflow-x: auto;
+        padding-bottom: 20px;
+        min-height: 70vh;
+    }
+    .kanban-column {
+        min-width: 300px;
+        max-width: 300px;
+        margin-right: 15px;
+        background-color: #f4f6f9;
+        border-radius: 5px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+    }
+    .kanban-column-title {
+        font-weight: 600;
+        margin-bottom: 10px;
+        padding: 5px;
+        font-size: 14px;
+        text-transform: uppercase;
+        color: #495057;
+    }
+    .kanban-items {
+        flex: 1;
+        min-height: 50px;
+    }
+    .kanban-item {
+        background: #fff;
+        border-radius: 4px;
+        padding: 15px;
+        margin-bottom: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        cursor: grab;
+        border-left: 4px solid #5f76e8;
+    }
+    .kanban-item:active {
+        cursor: grabbing;
+    }
+    .kanban-item a {
+        font-weight: 600;
+        color: #212529;
+        text-decoration: none;
+    }
+    .kanban-item a:hover {
+        color: #5f76e8;
+    }
+    .badge-NEW { border-left-color: #0dcaf0; }
+    .badge-CONTACTED { border-left-color: #ffc107; }
+    .badge-INTERESTED { border-left-color: #fd7e14; }
+    .badge-REQUIREMENT_RECEIVED { border-left-color: #6f42c1; }
+    .badge-QUOTATION_SENT { border-left-color: #198754; }
+    .badge-NEGOTIATION { border-left-color: #e83e8c; }
+    .badge-CONVERTED { border-left-color: #20c997; }
+    
+    .drag-over {
+        background-color: #e9ecef !important;
+        border: 2px dashed #adb5bd;
+    }
+</style>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Sales Pipeline</h3>
+            <div class="d-flex align-items-center mb-4">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb m-0 p-0">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Pipeline</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="kanban-board">
+                
+                <!-- NEW -->
+                <div class="kanban-column" data-status="NEW">
+                    <div class="kanban-column-title border-bottom border-info">NEW ({{ pipeline.NEW.count }})</div>
+                    <div class="kanban-items">
+                        {% for lead in pipeline.NEW %}
+                        <div class="kanban-item badge-NEW" draggable="true" data-id="{{ lead.id }}">
+                            <a href="{% url 'leads:detail' lead.id %}">{{ lead.company.company_name }}</a>
+                            <div class="text-muted small mt-1"><i class="fa fa-clock me-1"></i>{{ lead.created_at|timesince }} ago</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- CONTACTED -->
+                <div class="kanban-column" data-status="CONTACTED">
+                    <div class="kanban-column-title border-bottom border-warning">CONTACTED ({{ pipeline.CONTACTED.count }})</div>
+                    <div class="kanban-items">
+                        {% for lead in pipeline.CONTACTED %}
+                        <div class="kanban-item badge-CONTACTED" draggable="true" data-id="{{ lead.id }}">
+                            <a href="{% url 'leads:detail' lead.id %}">{{ lead.company.company_name }}</a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- INTERESTED -->
+                <div class="kanban-column" data-status="INTERESTED">
+                    <div class="kanban-column-title border-bottom" style="border-color:#fd7e14 !important;">INTERESTED ({{ pipeline.INTERESTED.count }})</div>
+                    <div class="kanban-items">
+                        {% for lead in pipeline.INTERESTED %}
+                        <div class="kanban-item badge-INTERESTED" draggable="true" data-id="{{ lead.id }}">
+                            <a href="{% url 'leads:detail' lead.id %}">{{ lead.company.company_name }}</a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- REQUIREMENT RECEIVED -->
+                <div class="kanban-column" data-status="REQUIREMENT_RECEIVED">
+                    <div class="kanban-column-title border-bottom" style="border-color:#6f42c1 !important;">REQUIREMENT ({{ pipeline.REQUIREMENT_RECEIVED.count }})</div>
+                    <div class="kanban-items">
+                        {% for lead in pipeline.REQUIREMENT_RECEIVED %}
+                        <div class="kanban-item badge-REQUIREMENT_RECEIVED" draggable="true" data-id="{{ lead.id }}">
+                            <a href="{% url 'leads:detail' lead.id %}">{{ lead.company.company_name }}</a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- QUOTATION SENT -->
+                <div class="kanban-column" data-status="QUOTATION_SENT">
+                    <div class="kanban-column-title border-bottom border-success">QUOTATION ({{ pipeline.QUOTATION_SENT.count }})</div>
+                    <div class="kanban-items">
+                        {% for lead in pipeline.QUOTATION_SENT %}
+                        <div class="kanban-item badge-QUOTATION_SENT" draggable="true" data-id="{{ lead.id }}">
+                            <a href="{% url 'leads:detail' lead.id %}">{{ lead.company.company_name }}</a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- NEGOTIATION -->
+                <div class="kanban-column" data-status="NEGOTIATION">
+                    <div class="kanban-column-title border-bottom" style="border-color:#e83e8c !important;">NEGOTIATION ({{ pipeline.NEGOTIATION.count }})</div>
+                    <div class="kanban-items">
+                        {% for lead in pipeline.NEGOTIATION %}
+                        <div class="kanban-item badge-NEGOTIATION" draggable="true" data-id="{{ lead.id }}">
+                            <a href="{% url 'leads:detail' lead.id %}">{{ lead.company.company_name }}</a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- CONVERTED -->
+                <div class="kanban-column" data-status="CONVERTED">
+                    <div class="kanban-column-title border-bottom" style="border-color:#20c997 !important;">CONVERTED ({{ pipeline.CONVERTED.count }})</div>
+                    <div class="kanban-items">
+                        {% for lead in pipeline.CONVERTED %}
+                        <div class="kanban-item badge-CONVERTED" draggable="true" data-id="{{ lead.id }}">
+                            <a href="{% url 'leads:detail' lead.id %}">{{ lead.company.company_name }}</a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <!-- LOST/REJECTED/INVALID -->
+                <div class="kanban-column" data-status="CLOSED_LOST">
+                    <div class="kanban-column-title border-bottom border-danger">LOST / REJECTED ({{ pipeline.LOST_OR_INVALID.count }})</div>
+                    <div class="kanban-items">
+                        {% for lead in pipeline.LOST_OR_INVALID %}
+                        <div class="kanban-item" style="border-left-color: #dc3545;" draggable="true" data-id="{{ lead.id }}">
+                            <a href="{% url 'leads:detail' lead.id %}">{{ lead.company.company_name }}</a>
+                            <div class="text-danger small mt-1">{{ lead.status }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const kanbanItems = document.querySelectorAll('.kanban-item');
+        const kanbanColumns = document.querySelectorAll('.kanban-column');
+        
+        let draggedItem = null;
+
+        kanbanItems.forEach(item => {
+            item.addEventListener('dragstart', function() {
+                draggedItem = this;
+                setTimeout(() => this.style.display = 'none', 0);
+            });
+            item.addEventListener('dragend', function() {
+                setTimeout(() => {
+                    this.style.display = 'block';
+                    draggedItem = null;
+                }, 0);
+            });
+        });
+
+        kanbanColumns.forEach(column => {
+            const itemsContainer = column.querySelector('.kanban-items');
+            
+            column.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.classList.add('drag-over');
+            });
+            
+            column.addEventListener('dragleave', function(e) {
+                this.classList.remove('drag-over');
+            });
+            
+            column.addEventListener('drop', function(e) {
+                this.classList.remove('drag-over');
+                if(draggedItem) {
+                    itemsContainer.appendChild(draggedItem);
+                    
+                    const leadId = draggedItem.getAttribute('data-id');
+                    const newStatus = this.getAttribute('data-status');
+                    
+                    // Send AJAX request
+                    fetch(`/crm/pipeline/update/${leadId}/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-CSRFToken': '{{ csrf_token }}'
+                        },
+                        body: `status=${newStatus}`
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if(!data.success) {
+                            alert('Failed to update status');
+                        }
+                    });
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

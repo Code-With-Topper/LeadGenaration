@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block title %}All Contacts - Lead CRM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">Contacts Management</h3>
+            <div class="d-flex align-items-center mb-4">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb m-0 p-0">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Contacts</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h4 class="card-title">All Discovered Contacts</h4>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped mb-0">
+                            <thead class="bg-info text-white">
+                                <tr>
+                                    <th scope="col">Company</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Designation</th>
+                                    <th scope="col">Department</th>
+                                    <th scope="col">Email</th>
+                                    <th scope="col">Mobile</th>
+                                    <th scope="col">LinkedIn</th>
+                                    <th scope="col">Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for contact in contacts %}
+                                <tr>
+                                    <td class="font-weight-medium text-dark">{{ contact.company.company_name }}</td>
+                                    <td>{{ contact.name|default:"<span class='text-muted'>NOT FOUND</span>"|safe }}</td>
+                                    <td>{{ contact.designation|default:"<span class='text-muted'>N/A</span>"|safe }}</td>
+                                    <td>{{ contact.department|default:"<span class='text-muted'>N/A</span>"|safe }}</td>
+                                    <td>
+                                        {% if contact.email and contact.email != 'NOT FOUND' %}
+                                            <a href="mailto:{{ contact.email }}">{{ contact.email }}</a>
+                                        {% else %}
+                                            <span class='text-muted'>NOT FOUND</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ contact.mobile|default:"<span class='text-muted'>NOT FOUND</span>"|safe }}</td>
+                                    <td>
+                                        {% if contact.linkedin_url %}
+                                            <a href="{{ contact.linkedin_url }}" target="_blank"><i class="mdi mdi-linkedin text-primary" style="font-size: 20px;"></i></a>
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if contact.notes %}
+                                            <i class="mdi mdi-information text-info" title="{{ contact.notes }}" style="cursor: pointer;"></i>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="8" class="text-center py-4">
+                                        <h5 class="text-muted">No contacts extracted yet.</h5>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

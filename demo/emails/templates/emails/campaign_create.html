@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Campaign - Lead CRM{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h3 class="page-title text-truncate text-dark font-weight-medium mb-1">New Email Campaign</h3>
+            <div class="d-flex align-items-center mb-4">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb m-0 p-0">
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard-index' %}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{% url 'emails:campaign_list' %}">Campaigns</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Create</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form action="{% url 'emails:campaign_create' %}" method="POST">
+                        {% csrf_token %}
+                        <div class="mb-4">
+                            <label class="form-label">Campaign Name</label>
+                            <input type="text" class="form-control" name="name" required placeholder="e.g. Q4 Outreach - Steel Manufacturers">
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card bg-light border">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Step 1 (Immediate)</h5>
+                                        <label class="form-label">Template</label>
+                                        <select class="form-select" name="template_1" required>
+                                            <option value="">[ Choose a template ]</option>
+                                            {% for template in templates %}
+                                            <option value="{{ template.id }}">{{ template.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light border">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Step 2 (Follow-up)</h5>
+                                        <label class="form-label">Template (Optional)</label>
+                                        <select class="form-select mb-2" name="template_2">
+                                            <option value="">[ None ]</option>
+                                            {% for template in templates %}
+                                            <option value="{{ template.id }}">{{ template.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <label class="form-label">Wait Days</label>
+                                        <input type="number" class="form-control" name="delay_2" value="3" min="1">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light border">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Step 3 (Final)</h5>
+                                        <label class="form-label">Template (Optional)</label>
+                                        <select class="form-select mb-2" name="template_3">
+                                            <option value="">[ None ]</option>
+                                            {% for template in templates %}
+                                            <option value="{{ template.id }}">{{ template.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <label class="form-label">Wait Days</label>
+                                        <input type="number" class="form-control" name="delay_3" value="7" min="1">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="form-label">Select Leads</label>
+                            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; border-radius: 5px; padding: 10px;">
+                                {% for lead in leads %}
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" name="leads" value="{{ lead.id }}" id="lead_{{ lead.id }}">
+                                    <label class="form-check-label" for="lead_{{ lead.id }}">
+                                        <strong>{{ lead.company.company_name }}</strong> ({{ lead.company.company_email }})
+                                    </label>
+                                </div>
+                                {% empty %}
+                                <p class="text-muted mb-0">No leads with valid emails found.</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-success waves-effect waves-light"><i class="fa fa-play me-1"></i> START CAMPAIGN</button>
+                            <a href="{% url 'emails:campaign_list' %}" class="btn btn-light waves-effect waves-light">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

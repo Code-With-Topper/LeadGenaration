@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}Industrial Lead Generation & CRM Platform{% endblock %}
+{% block meta %}
+<meta name="description" content="A complete industrial lead generation, CRM, and email automation platform to scale your manufacturing business.">
+<meta property="og:title" content="Lead CRM - Scale Your Business">
+<meta property="og:description" content="Industrial lead generation and CRM for modern manufacturing.">
+<meta property="og:image" content="/static/images/social-preview.png">
+<meta property="og:url" content="https://leadcrm.example.com">
+<meta property="og:type" content="website">
+{% endblock %}
+{% block content %}
+<div class="container text-center py-5 mt-5">
+    <h1 class="display-4 font-weight-bold">Scale Your Industrial Sales</h1>
+    <p class="lead text-muted mb-5">End-to-end B2B Lead Generation, CRM Pipeline, and Email Automation.</p>
+    <a href="{% url 'login' %}" class="btn btn-primary btn-lg px-5 py-3 shadow-sm rounded-pill">Request a Demo</a>
+</div>
+{% endblock %}

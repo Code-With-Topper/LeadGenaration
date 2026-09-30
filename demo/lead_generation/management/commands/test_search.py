@@ -27,6 +27,9 @@ class Command(BaseCommand):
             help='Skip searching and crawl this one site, to test extraction.')
         parser.add_argument('--limit', type=int, default=5,
                             help='How many results to ask for.')
+        parser.add_argument(
+            '--debug', action='store_true',
+            help='Save each results page to a file, to see what came back.')
 
     def handle(self, *args, **options):
         ok = self.style.SUCCESS
@@ -58,24 +61,33 @@ class Command(BaseCommand):
 
                 self.stdout.write('\n2. Asking each search source…')
                 query = options['query']
-                self.stdout.write(f'   query: {query}\n')
+                self.stdout.write(f'   query    : {query}')
+                self.stdout.write(f'   sent as  : {engine.with_exclusions(query)}\n')
 
                 any_worked = False
                 for name, search in engine.SEARCH_SOURCES:
                     self.stdout.write(f'   {name}…')
                     try:
-                        results, outcome = search(browser, query,
-                                                  options['limit'])
+                        results, outcome, stats = search(browser, query,
+                                                         options['limit'])
                     except Exception as exc:
                         self.stdout.write(bad(f'     crashed: {exc}'))
                         continue
 
                     if outcome == engine.SearchOutcome.OK:
                         any_worked = True
-                        self.stdout.write(ok(f'     {len(results)} result(s):'))
+                        self.stdout.write(ok(f'     {len(results)} result(s)'
+                                             f'  [{stats.summary}]'))
                         for title, url in results:
                             self.stdout.write(f'       - {title[:58]}')
                             self.stdout.write(f'         {url[:76]}')
+                    elif outcome == engine.SearchOutcome.NO_MATCH:
+                        # The engine worked. Something about the results, or
+                        # the filters, is the problem — say which.
+                        self.stdout.write(warn(
+                            '     WORKED, but no result was a company site.'))
+                        self.stdout.write(f'       {stats.summary}')
+                        self._explain_no_match(stats)
                     elif outcome == engine.SearchOutcome.BLOCKED:
                         self.stdout.write(warn(
                             '     BLOCKED — a challenge, consent wall or rate '
@@ -89,8 +101,10 @@ class Command(BaseCommand):
                             'Check outbound network and DNS.'))
                     else:
                         self.stdout.write(warn(
-                            '     answered, but nothing matched after '
-                            'filtering out directories and listicles.'))
+                            '     the page answered but held no result links.'))
+
+                    if options['debug']:
+                        self._dump(browser, name)
 
                 self.stdout.write('')
                 if any_worked:
@@ -113,6 +127,42 @@ class Command(BaseCommand):
                 '    playwright install --with-deps chromium\n'
                 'If the browser lives somewhere unusual, set CHROME_BINARY to '
                 'its full path.\n')
+
+    def _explain_no_match(self, stats):
+        """Point at the actual cause, rather than leaving a dead end."""
+        if stats.directory and stats.directory >= stats.anchors // 2:
+            self.stdout.write(
+                '       Most results were directory sites (IndiaMART, '
+                'Justdial and similar).\n'
+                '       Those are listings, not companies, so they are not '
+                'stored as leads.\n'
+                '       Try a narrower query, e.g. the town plus the product '
+                'without the word "company".')
+        elif stats.bad_url:
+            self.stdout.write(
+                '       Links were found but could not be turned into usable '
+                'addresses.\n'
+                '       That points at the URL decoder for this engine — worth '
+                'reporting with --debug output.')
+        elif stats.listicle:
+            self.stdout.write(
+                '       Results were "Top 10 …" style list pages rather than '
+                'companies.\n'
+                '       Try a more specific query.')
+        else:
+            self.stdout.write(
+                '       Run again with --debug to save the page and see what '
+                'came back.')
+
+    def _dump(self, browser, name):
+        """Save the page so its markup can be looked at afterwards."""
+        import pathlib
+        target = pathlib.Path(f'search-debug-{name.lower()}.html')
+        try:
+            target.write_text(browser.html(), encoding='utf-8')
+            self.stdout.write(f'       page saved to {target}')
+        except Exception as exc:
+            self.stdout.write(f'       could not save the page: {exc}')
 
     def _crawl_one(self, browser, url):
         """Crawl one site and print what was extracted."""

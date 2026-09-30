@@ -184,12 +184,12 @@ class SearchSourceTests(TestCase):
 
         def blocked(browser, query, limit):
             calls.append('blocked')
-            return [], engine.SearchOutcome.BLOCKED
+            return [], engine.SearchOutcome.BLOCKED, engine.ResultStats()
 
         def works(browser, query, limit):
             calls.append('works')
-            return [('SD Steel Pvt Ltd', 'https://sdsteel.in')], \
-                engine.SearchOutcome.OK
+            return ([('SD Steel Pvt Ltd', 'https://sdsteel.in')],
+                    engine.SearchOutcome.OK, engine.ResultStats(kept=1))
 
         original = engine.SEARCH_SOURCES
         engine.SEARCH_SOURCES = (('First', blocked), ('Second', works))
@@ -206,7 +206,7 @@ class SearchSourceTests(TestCase):
     def test_an_empty_result_says_which_sources_were_tried(self):
         """A bare "0 leads" teaches the user nothing."""
         def nothing(browser, query, limit):
-            return [], engine.SearchOutcome.EMPTY
+            return [], engine.SearchOutcome.EMPTY, engine.ResultStats()
 
         original = engine.SEARCH_SOURCES
         engine.SEARCH_SOURCES = (('OnlyOne', nothing),)
@@ -233,6 +233,117 @@ class SearchSourceTests(TestCase):
     def test_a_direct_result_url_passes_through(self):
         self.assertEqual(engine._decode_ddg_url('https://sdsteel.in/'),
                          'https://sdsteel.in/')
+
+
+class NoMatchIsNotBlockedTests(TestCase):
+    """
+    The bug this pins: Bing served a perfectly good results page whose markup
+    did not match `li.b_algo h2 a`. The selector timeout was reported as
+    BLOCKED, so a working search engine was retired after two queries and the
+    real cause — the selector — stayed hidden.
+    """
+
+    def test_filtering_everything_out_is_not_a_refusal(self):
+        state = engine.SearchState()
+        for _ in range(5):
+            state.record('Bing', engine.SearchOutcome.NO_MATCH)
+        self.assertIn('Bing', [name for name, _fn in state.live_sources()])
+        self.assertFalse(state.all_blocked)
+
+    def test_an_empty_page_is_not_a_refusal_either(self):
+        state = engine.SearchState()
+        for _ in range(5):
+            state.record('Bing', engine.SearchOutcome.EMPTY)
+        self.assertIn('Bing', [name for name, _fn in state.live_sources()])
+
+    def test_only_blocked_and_unreachable_retire_a_source(self):
+        self.assertEqual(
+            set(engine.SearchOutcome.REFUSALS),
+            {engine.SearchOutcome.BLOCKED, engine.SearchOutcome.UNREACHABLE})
+
+    def test_no_match_says_what_was_dropped_and_why(self):
+        """
+        "nothing matched after filtering" was a dead end. The reason has to
+        come back with the outcome.
+        """
+        def all_directories(browser, query, limit):
+            return [], engine.SearchOutcome.NO_MATCH, engine.ResultStats(
+                anchors=10, kept=0, directory=9, listicle=1)
+
+        original = engine.SEARCH_SOURCES
+        engine.SEARCH_SOURCES = (('Anywhere', all_directories),)
+        try:
+            engine.polite_sleep = lambda: None
+            _results, note = engine.run_search(None, 'q', 5,
+                                               engine.SearchState())
+        finally:
+            engine.SEARCH_SOURCES = original
+
+        self.assertIn('10 link(s) on the page', note)
+        self.assertIn('9 dropped as directory site', note)
+        self.assertIn('1 dropped as listicle page', note)
+
+
+class ResultFilteringTests(TestCase):
+    """What _collect keeps, drops, and counts."""
+
+    @staticmethod
+    def anchors(*pairs):
+        return [{'href': href, 'title': title} for href, title in pairs]
+
+    def test_a_company_site_is_kept(self):
+        found, stats = engine._collect(
+            self.anchors(('https://sdsteel.in/', 'SD Steel Pvt Ltd')),
+            5, decode=lambda h: h)
+        self.assertEqual(found, [('SD Steel Pvt Ltd', 'https://sdsteel.in/')])
+        self.assertEqual(stats.kept, 1)
+
+    def test_directories_listicles_and_junk_are_counted_separately(self):
+        found, stats = engine._collect(
+            self.anchors(
+                ('https://www.indiamart.com/x', 'SD Steel on IndiaMART'),
+                ('https://blog.example/top', 'Top 10 Sponge Iron Makers'),
+                ('not-a-url', 'Something'),
+                ('https://sdsteel.in/', ''),
+                ('https://sdsteel.in/', 'SD Steel Pvt Ltd'),
+                ('https://sdsteel.in/products', 'SD Steel Products'),
+            ),
+            5, decode=lambda h: h)
+
+        self.assertEqual([t for t, _u in found], ['SD Steel Pvt Ltd'])
+        self.assertEqual(stats.anchors, 6)
+        self.assertEqual(stats.directory, 1)
+        self.assertEqual(stats.listicle, 1)
+        self.assertEqual(stats.bad_url, 1)
+        self.assertEqual(stats.no_title, 1)
+        self.assertEqual(stats.duplicate, 1)
+        self.assertEqual(stats.kept, 1)
+
+    def test_the_stats_read_as_a_sentence(self):
+        _found, stats = engine._collect(
+            self.anchors(('https://www.justdial.com/x', 'Steel in Durgapur')),
+            5, decode=lambda h: h)
+        self.assertIn('1 link(s) on the page', stats.summary)
+        self.assertIn('dropped as directory site', stats.summary)
+
+
+class QueryExclusionTests(TestCase):
+    """
+    Directories dominate Indian industrial searches, so they are excluded in
+    the query rather than filtered off the results page — which is what left
+    the first page with nothing usable on it.
+    """
+
+    def test_directories_are_excluded_in_the_query_itself(self):
+        sent = engine.with_exclusions('sponge iron manufacturer in Durgapur')
+        self.assertIn('sponge iron manufacturer in Durgapur', sent)
+        self.assertIn('-site:indiamart.com', sent)
+        self.assertIn('-site:justdial.com', sent)
+
+    def test_every_excluded_domain_is_one_the_filter_also_rejects(self):
+        from core import validation
+        for domain in engine.EXCLUDED_IN_QUERY:
+            self.assertTrue(validation.is_directory_domain(domain), domain)
 
 
 class BlockDetectionTests(TestCase):

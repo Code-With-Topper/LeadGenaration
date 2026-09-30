@@ -264,7 +264,11 @@ It will tell you which of three things is wrong:
 |---|---|---|
 | *the browser would not start* | Playwright's browser is missing | `playwright install --with-deps chromium`, or set `CHROME_BINARY` to its full path |
 | *UNREACHABLE* | No outbound HTTPS or no DNS | Check the firewall: `curl -I https://html.duckduckgo.com/` |
-| *BLOCKED* | The search engine is refusing this server | See below |
+| *BLOCKED* | The engine is refusing this server — it shows the page it landed on, so you can confirm | See below |
+| *WORKED, but no result was a company site* | The engine answered fine; the results were directories or list pages | It prints how many links it saw and why each was dropped. Usually a narrower query fixes it. |
+
+Add `--debug` to save each results page to a file, when the counts are not
+enough to explain what came back.
 
 To test extraction on one site, without searching at all:
 

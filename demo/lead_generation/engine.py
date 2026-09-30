@@ -374,13 +374,113 @@ def _clean_result(href: str, title: str) -> tuple[str, str] | None:
 class SearchOutcome:
     """Why a search returned what it did — so a failure can be explained."""
     OK = 'ok'                 # results found
-    EMPTY = 'empty'           # the page loaded, genuinely nothing matched
+    EMPTY = 'empty'           # the page answered and had no results on it
+    NO_MATCH = 'no-match'     # results were there, but all were filtered out
     BLOCKED = 'blocked'       # challenge, consent wall or rate limit
     UNREACHABLE = 'unreachable'   # the page would not load at all
 
+    # A source that filtered everything out is working fine — the query needs
+    # changing, not the source. Only these two mean "stop asking".
+    REFUSALS = (BLOCKED, UNREACHABLE)
+
+
+@dataclass
+class ResultStats:
+    """
+    Why each search hit was kept or dropped.
+
+    Without this, "nothing matched after filtering" is a dead end: it could be
+    a broken URL decoder, an over-aggressive filter, or a page genuinely full
+    of directory listings. These counts say which.
+    """
+    anchors: int = 0
+    kept: int = 0
+    bad_url: int = 0
+    directory: int = 0
+    listicle: int = 0
+    no_title: int = 0
+    duplicate: int = 0
+
+    @property
+    def summary(self) -> str:
+        parts = [f'{self.anchors} link(s) on the page', f'{self.kept} kept']
+        for count, label in (
+            (self.bad_url, 'unusable URL'),
+            (self.directory, 'directory site'),
+            (self.listicle, 'listicle page'),
+            (self.no_title, 'no title'),
+            (self.duplicate, 'same domain twice'),
+        ):
+            if count:
+                parts.append(f'{count} dropped as {label}')
+        return ', '.join(parts)
+
+
+# Directories crowd out real company sites in Indian industrial searches, so
+# they are excluded in the query itself rather than filtered out afterwards —
+# which is what left the first page with nothing usable on it.
+EXCLUDED_IN_QUERY = (
+    'indiamart.com', 'justdial.com', 'tradeindia.com', 'exportersindia.com',
+    'sulekha.com', 'zaubacorp.com',
+)
+
+
+def with_exclusions(query: str) -> str:
+    """Add -site: terms so the results page is not all directory listings."""
+    return query + ' ' + ' '.join(f'-site:{d}' for d in EXCLUDED_IN_QUERY)
+
+
+# Every result link lives inside the page's main content. Grabbing anchors from
+# there and filtering, rather than depending on one class name, is what keeps a
+# markup change from silently returning nothing.
+ALL_LINKS_JS = """
+    () => {
+        const scope = document.querySelector(
+            '#b_results, #search, #rso, #links, #web_content_wrapper, main')
+            || document.body;
+        return Array.from(scope.querySelectorAll('a[href]'))
+            .map(a => ({href: a.href || '',
+                        title: (a.innerText || a.textContent || '').trim()}))
+            .filter(x => x.href && x.title);
+    }
+"""
+
+
+def _anchors(browser: Browser, *selector_scripts) -> list:
+    """
+    Try each specific extractor, then fall back to every link in the content
+    area. Returns whatever the first one that finds anything gives.
+    """
+    for script in selector_scripts:
+        anchors = browser.evaluate(script, default=[]) or []
+        if anchors:
+            return anchors
+    return browser.evaluate(ALL_LINKS_JS, default=[]) or []
+
+
+def _finish_search(browser: Browser, anchors, limit, *, decode):
+    """
+    Turn anchors into results and decide the outcome.
+
+    The important distinction: a page that answered but whose results were all
+    filtered out is NOT blocked. Reporting it as blocked retired a working
+    search engine and hid the real problem, which was the query.
+    """
+    if is_blocked_page(browser):
+        return [], SearchOutcome.BLOCKED, ResultStats()
+
+    if not anchors:
+        # Not one link in the content area: the page did not really render.
+        return [], SearchOutcome.BLOCKED, ResultStats()
+
+    found, stats = _collect(anchors, limit, decode=decode)
+    if found:
+        return found, SearchOutcome.OK, stats
+    return [], SearchOutcome.NO_MATCH, stats
+
 
 def search_duckduckgo(browser: Browser, query: str,
-                      limit: int) -> tuple[list, str]:
+                      limit: int) -> tuple[list, str, ResultStats]:
     """
     DuckDuckGo's HTML endpoint. Tried first, deliberately.
 
@@ -388,98 +488,83 @@ def search_duckduckgo(browser: Browser, query: str,
     doing this politely, so it is the source most likely to work from a small
     VPS. Google and Bing are the fallbacks, not the other way round.
     """
-    url = 'https://html.duckduckgo.com/html/?q=' + quote_plus(query)
+    url = 'https://html.duckduckgo.com/html/?q=' + quote_plus(with_exclusions(query))
     LOGGER.info('Searching DuckDuckGo: %s', query)
 
     if not browser.goto(url):
-        return [], SearchOutcome.UNREACHABLE
-    if is_blocked_page(browser):
-        return [], SearchOutcome.BLOCKED
+        return [], SearchOutcome.UNREACHABLE, ResultStats()
 
-    anchors = browser.evaluate("""
+    anchors = _anchors(browser, """
         () => Array.from(document.querySelectorAll(
-                'a.result__a, h2.result__title > a, .result__title a'))
+                'a.result__a, h2.result__title a, .result__title a'))
             .map(a => ({href: a.href || '',
                         title: (a.innerText || a.textContent || '').trim()}))
-    """, default=[]) or []
-
-    if not anchors:
-        # No result links at all usually means a challenge page, not a query
-        # with no matches.
-        if 'anomaly' in browser.html().lower()[:4000]:
-            return [], SearchOutcome.BLOCKED
-        return [], SearchOutcome.EMPTY
-
-    found = _collect(anchors, limit, decode=_decode_ddg_url)
-    return found, SearchOutcome.OK if found else SearchOutcome.EMPTY
+    """)
+    return _finish_search(browser, anchors, limit, decode=_decode_ddg_url)
 
 
-def search_bing(browser: Browser, query: str, limit: int) -> tuple[list, str]:
-    """Bing. Second choice: usable, but rate limits a server quickly."""
+def search_bing(browser: Browser, query: str,
+                limit: int) -> tuple[list, str, ResultStats]:
+    """
+    Bing. Second choice: usable, but rate limits a server quickly.
+
+    It does not wait on one class name any more. Bing served a perfectly good
+    results page whose markup did not match `li.b_algo h2 a`, and the timeout
+    was reported as a block — so a working source was dropped.
+    """
     LOGGER.info('Searching Bing: %s', query)
-    url = ('https://www.bing.com/search?q=' + quote_plus(query)
+    url = ('https://www.bing.com/search?q=' + quote_plus(with_exclusions(query))
            + '&count=30&setlang=en&cc=IN')
 
     if not browser.goto(url):
-        return [], SearchOutcome.UNREACHABLE
-    if is_blocked_page(browser):
-        return [], SearchOutcome.BLOCKED
+        return [], SearchOutcome.UNREACHABLE, ResultStats()
 
-    if not browser.wait_for('li.b_algo h2 a, .b_algo h2 a'):
-        return [], SearchOutcome.BLOCKED
+    # Give the results a moment, but never treat a miss as a refusal.
+    browser.wait_for('li.b_algo, .b_algo, #b_results')
 
-    anchors = browser.evaluate("""
-        () => Array.from(document.querySelectorAll('li.b_algo h2 a, .b_algo h2 a'))
+    anchors = _anchors(
+        browser,
+        """
+        () => Array.from(document.querySelectorAll(
+                'li.b_algo h2 a, .b_algo h2 a, li.b_algo a.tilk, .b_algo a.tilk'))
             .map(a => ({href: a.href || '',
                         title: (a.innerText || a.textContent || '').trim()}))
-    """, default=[]) or []
+        """,
+        """
+        () => Array.from(document.querySelectorAll('#b_results h2 a'))
+            .map(a => ({href: a.href || '',
+                        title: (a.innerText || a.textContent || '').trim()}))
+        """,
+    )
+    return _finish_search(browser, anchors, limit, decode=_decode_bing_url)
 
-    if not anchors:
-        return [], SearchOutcome.EMPTY
 
-    found = _collect(anchors, limit, decode=_decode_bing_url)
-    return found, SearchOutcome.OK if found else SearchOutcome.EMPTY
-
-
-def search_google(browser: Browser, query: str, limit: int) -> tuple[list, str]:
+def search_google(browser: Browser, query: str,
+                  limit: int) -> tuple[list, str, ResultStats]:
     """
     Google. Last choice: the best index, and the quickest to refuse a server.
 
-    One request with num=, rather than paging: when Google is going to block
-    us it does so on the first request, and paging just multiplies the wait.
+    One request with num=, rather than paging: when Google is going to block us
+    it does so on the first request, and paging only multiplies the wait.
     """
     LOGGER.info('Searching Google: %s', query)
-    url = (f'https://www.google.com/search?q={quote_plus(query)}'
+    url = (f'https://www.google.com/search?q={quote_plus(with_exclusions(query))}'
            f'&num={min(limit, 30)}&hl=en&gl=in')
 
     if not browser.goto(url):
-        return [], SearchOutcome.UNREACHABLE
-    if is_blocked_page(browser):
-        return [], SearchOutcome.BLOCKED
+        return [], SearchOutcome.UNREACHABLE, ResultStats()
 
-    # Real result links sit inside a heading; matching those rather than every
-    # anchor keeps navigation, footer and "related searches" out.
-    anchors = browser.evaluate("""
-        () => Array.from(document.querySelectorAll('div#search a[href] h3, div#rso a[href] h3'))
+    anchors = _anchors(browser, """
+        () => Array.from(document.querySelectorAll(
+                'div#search a[href] h3, div#rso a[href] h3'))
             .map(h => {
                 const a = h.closest('a');
                 return {href: a ? (a.href || '') : '',
                         title: (h.innerText || h.textContent || '').trim()};
             })
-    """, default=[]) or []
-
-    if not anchors:
-        # Fall back to a broad sweep before concluding anything.
-        anchors = browser.evaluate("""
-            () => Array.from(document.querySelectorAll('a[href]'))
-                .map(a => ({href: a.href || '',
-                            title: (a.innerText || '').trim()}))
-        """, default=[]) or []
-        if not anchors:
-            return [], SearchOutcome.BLOCKED
-
-    found = _collect(anchors, limit, decode=_decode_google_url)
-    return found, SearchOutcome.OK if found else SearchOutcome.EMPTY
+            .filter(x => x.href)
+    """)
+    return _finish_search(browser, anchors, limit, decode=_decode_google_url)
 
 
 # Tried in this order. The first one that returns results wins.
@@ -517,8 +602,10 @@ class SearchState:
         if outcome == SearchOutcome.OK:
             self.wins[name] = self.wins.get(name, 0) + 1
             self.blocks.pop(name, None)      # a win clears earlier blocks
-        elif outcome in (SearchOutcome.BLOCKED, SearchOutcome.UNREACHABLE):
+        elif outcome in SearchOutcome.REFUSALS:
             self.blocks[name] = self.blocks.get(name, 0) + 1
+        # NO_MATCH and EMPTY leave the source alone: it answered, so it is
+        # working. Retiring it would hide a query problem as a block.
 
     def summary(self) -> str:
         parts = [f'{name}: {count} search(es) worked'
@@ -538,19 +625,25 @@ def run_search(browser: Browser, query: str, limit: int,
     """
     attempts = []
     for name, search in state.live_sources():
-        results, outcome = search(browser, query, limit)
+        results, outcome, stats = search(browser, query, limit)
         state.record(name, outcome)
-        attempts.append(f'{name} {outcome}')
 
         if results:
             return results, f'{len(results)} site(s) via {name}'
-        if outcome in (SearchOutcome.BLOCKED, SearchOutcome.UNREACHABLE):
+
+        if outcome == SearchOutcome.NO_MATCH:
+            # The engine worked; the results simply were not companies. Saying
+            # what was dropped points at the query, not at the engine.
+            attempts.append(f'{name}: {stats.summary}')
+        else:
+            attempts.append(f'{name}: {outcome}')
+
+        if outcome in SearchOutcome.REFUSALS:
             LOGGER.warning('%s did not answer (%s) for: %s', name, outcome, query)
             continue
-        # EMPTY: the source answered and had nothing. Trying another may help.
         polite_sleep()
 
-    return [], 'no results (' + ', '.join(attempts) + ')'
+    return [], 'no usable results — ' + '; '.join(attempts)
 
 
 def _decode_ddg_url(href: str) -> str:
@@ -568,25 +661,46 @@ def _decode_ddg_url(href: str) -> str:
     return href
 
 
-def _collect(anchors, limit, *, decode, seen=None) -> list[tuple[str, str]]:
+def _collect(anchors, limit, *, decode,
+             seen=None) -> tuple[list[tuple[str, str]], ResultStats]:
+    """Turn raw anchors into usable results, counting why each was dropped."""
     found: list[tuple[str, str]] = []
+    stats = ResultStats(anchors=len(anchors))
     seen = set(seen or ())
+
     for item in anchors:
         if len(found) >= limit:
             break
+
         href = decode(item.get('href', ''))
-        cleaned = _clean_result(href, item.get('title', ''))
-        if not cleaned:
+        title = (item.get('title') or '').strip()
+
+        url = normalize.normalize_url(href)
+        domain = normalize.normalize_domain(url) if url else ''
+        if not domain:
+            stats.bad_url += 1
             continue
-        title, url = cleaned
+        if validation.is_directory_domain(domain):
+            stats.directory += 1
+            continue
+        if not title:
+            stats.no_title += 1
+            continue
+        title = title.splitlines()[0]
+        if validation.looks_like_listicle(title):
+            stats.listicle += 1
+            continue
         # One entry per domain: a company's home page and its products page
         # are the same company.
-        domain = normalize.normalize_domain(url)
         if domain in seen:
+            stats.duplicate += 1
             continue
+
         seen.add(domain)
         found.append((title, url))
-    return found
+        stats.kept += 1
+
+    return found, stats
 
 
 def _decode_google_url(href: str) -> str:

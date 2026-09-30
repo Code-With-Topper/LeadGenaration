@@ -3,7 +3,7 @@
 #   cp deploy/leadcrm-worker.service /etc/systemd/system/
 #   systemctl enable --now leadcrm-worker
 #
-# If you would rather use cron, skip this file and see SETUP.md §2.
+# If you would rather use cron, skip this file and see crontab.example.
 [Unit]
 Description=Lead Generation CRM (background worker)
 After=network.target
